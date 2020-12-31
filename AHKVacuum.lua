@@ -69,13 +69,8 @@ local curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditio
 local prvInteractionType = GetInteractionType()
 local curInteractionType = GetInteractionType()
 local isPressingRight, isPressingLeft, isPressingUp, isPressingDown = false, false, false, false
+local doAutomoveVacuumLoot = false
 local doVacuumLoot = false
-function AHKVacuum.UpdateVacuumLoot()
-	local newVacuumLoot = (isPressingRight or isPressingLeft or isPressingUp or isPressingDown)
-	if newVacuumLoot ~= doVacuumLoot then
-		doVacuumLoot = newVacuumLoot
-	end
-end
 function AHKVacuum.PrintReticle(action, interactableName, interactBlocked, isOwned, additionalInfo, contextualInfo, contextualLink, isCriminalInteract)
 	--local action, interactableName, interactBlocked, isOwned, additionalInfo, contextualInfo, contextualLink, isCriminalInteract = GetGameCameraInteractableActionInfo()
 	d("---"
@@ -88,16 +83,34 @@ function AHKVacuum.PrintReticle(action, interactableName, interactBlocked, isOwn
 		.." ctxLink:"..tostring(contextualLink)
 		.." crim:"..tostring(isCriminalInteract))
 end
-
+function AHKVacuum.UpdateVacuumLoot()
+	local newVacuumLoot = (isPressingRight or isPressingLeft or isPressingUp or isPressingDown or doAutomoveVacuumLoot)
+	if newVacuumLoot ~= doVacuumLoot then
+		doVacuumLoot = newVacuumLoot
+	end
+	if isPressingUp or isPressingDown then
+		doAutomoveVacuumLoot = false
+	end
+end
 local function tapE() ptk.SetIndOnFor(ptk.VK_E, 50) end
+function AHKVacuum:ShopAutomoveToggle()
+	if not doAutomoveVacuumLoot then
+		ptk.SetIndOn (ptk.VK_W)
+		doAutomoveVacuumLoot = true
+	else
+		ptk.SetIndOff (ptk.VK_W)
+		doAutomoveVacuumLoot = false
+	end
+	AHKVacuum.UpdateVacuumLoot()
+end
 function AHKVacuum:ShopDirectionRightOn()  ptk.SetIndOn (ptk.VK_D) isPressingRight = true  AHKVacuum.UpdateVacuumLoot() end
 function AHKVacuum:ShopDirectionRightOff() ptk.SetIndOff(ptk.VK_D) isPressingRight = false AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionLeftOn()   ptk.SetIndOn (ptk.VK_A) isPressingLeft = true  AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionLeftOff()  ptk.SetIndOff(ptk.VK_A) isPressingLeft = false AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) isPressingUp = true  AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) isPressingUp = false AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) isPressingDown = true  AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) isPressingDown = false AHKVacuum.UpdateVacuumLoot() end
+function AHKVacuum:ShopDirectionLeftOn()   ptk.SetIndOn (ptk.VK_A) isPressingLeft = true   AHKVacuum.UpdateVacuumLoot() end
+function AHKVacuum:ShopDirectionLeftOff()  ptk.SetIndOff(ptk.VK_A) isPressingLeft = false  AHKVacuum.UpdateVacuumLoot() end
+function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) isPressingUp = true     AHKVacuum.UpdateVacuumLoot() end
+function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) isPressingUp = false    AHKVacuum.UpdateVacuumLoot() end
+function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) isPressingDown = true   AHKVacuum.UpdateVacuumLoot() end
+function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) isPressingDown = false  AHKVacuum.UpdateVacuumLoot() end
 --function AHKVacuum:ShopDirectionDownOn()   end
 --function AHKVacuum:ShopDirectionDownOff()
 --	--AHKVacuum.PrintReticle(prvAction, prvInteractableName, prvInteractBlocked, prvIsOwned, prvAdditionalInfo, prvContextualInfo, prvContextualLink, prvIsCriminalInteract)
@@ -115,7 +128,7 @@ function AHKVacuum.HaltMovementToLoot()
 	dmsg("HaltMovementToLoot")
 	if isPressingRight then ptk.SetIndOff(ptk.VK_D) end
 	if isPressingLeft then ptk.SetIndOff(ptk.VK_A) end
-	if isPressingUp then ptk.SetIndOff(ptk.VK_W) end
+	if isPressingUp or doAutomoveVacuumLoot then ptk.SetIndOff(ptk.VK_W) end
 	if isPressingDown then ptk.SetIndOff(ptk.VK_S) end
 	tapE()
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, AHKVacuum.OnInventorySingleSlotUpdate)
@@ -124,7 +137,7 @@ function AHKVacuum.ResumeMovement()
 	dmsg("Looted. Resuming Movement")
 	if isPressingRight then ptk.SetIndOn(ptk.VK_D) end
 	if isPressingLeft then ptk.SetIndOn(ptk.VK_A) end
-	if isPressingUp then ptk.SetIndOn(ptk.VK_W) end
+	if isPressingUp or doAutomoveVacuumLoot then ptk.SetIndOn(ptk.VK_W) end
 	if isPressingDown then ptk.SetIndOn(ptk.VK_S) end
 	curInteractableName = nil
 end
@@ -202,6 +215,7 @@ end
 --end
 
 function AHKVacuum:Initialize()
+	ZO_CreateStringId("SI_BINDING_NAME_VACUUM_AUTOMOVE", "Vacuum Shop Automove")
 	ZO_CreateStringId("SI_BINDING_NAME_VACUUM_RIGHT", "Vacuum Shop Right")
 	ZO_CreateStringId("SI_BINDING_NAME_VACUUM_LEFT", "Vacuum Shop Left")
 	ZO_CreateStringId("SI_BINDING_NAME_VACUUM_UP", "Vacuum Shop Up")

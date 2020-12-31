@@ -1,6 +1,9 @@
 <Bindings>
    <Layer name="SI_KEYBINDINGS_LAYER_GENERAL">
       <Category name="Vacuum Shop">
+         <Action name="VACUUM_AUTOMOVE">
+            <Down>AHKVacuum:ShopAutomoveToggle()</Down>
+         </Action>
          <Action name="VACUUM_RIGHT">
             <Down>AHKVacuum:ShopDirectionRightOn()</Down>
             <Up>AHKVacuum:ShopDirectionRightOff()</Up>
