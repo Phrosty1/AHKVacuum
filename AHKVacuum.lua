@@ -2,6 +2,17 @@
 AHKVacuum = {}
 AHKVacuum.name = "AHKVacuum"
 --AHKVacuum.savedVars = {}
+local function newIndexedSet(...)
+	local retval = {}
+	for key,value in pairs(...) do
+		retval[key] = value
+	end
+	return retval
+end
+--AHKVacuum.lootActions = {
+--					["Bookshelf"] =	  1,
+--					["Book Stack"] =	  1,
+--			}
 AHKVacuum.ignoreSearch = {
 					["Bookshelf"] =	  1,
 					["Book Stack"] =	  1,
@@ -93,15 +104,24 @@ function AHKVacuum.UpdateVacuumLoot()
 	end
 end
 local function tapE() ptk.SetIndOnFor(ptk.VK_E, 50) end
+--function AHKVacuum:ShopAutomoveToggle()
+--	if not doAutomoveVacuumLoot then
+--		ptk.SetIndOn (ptk.VK_W)
+--		doAutomoveVacuumLoot = true
+--	else
+--		ptk.SetIndOff (ptk.VK_W)
+--		doAutomoveVacuumLoot = false
+--	end
+--	AHKVacuum.UpdateVacuumLoot()
+--end
 function AHKVacuum:ShopAutomoveToggle()
-	if not doAutomoveVacuumLoot then
-		ptk.SetIndOn (ptk.VK_W)
-		doAutomoveVacuumLoot = true
+	if not doVacuumLoot then
+		doVacuumLoot = true
+		d("VacuumLoot ON")
 	else
-		ptk.SetIndOff (ptk.VK_W)
-		doAutomoveVacuumLoot = false
+		doVacuumLoot = false
+		d("VacuumLoot OFF")
 	end
-	AHKVacuum.UpdateVacuumLoot()
 end
 function AHKVacuum:ShopDirectionRightOn()  ptk.SetIndOn (ptk.VK_D) isPressingRight = true  AHKVacuum.UpdateVacuumLoot() end
 function AHKVacuum:ShopDirectionRightOff() ptk.SetIndOff(ptk.VK_D) isPressingRight = false AHKVacuum.UpdateVacuumLoot() end
