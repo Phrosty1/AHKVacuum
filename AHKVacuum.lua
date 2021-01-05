@@ -2,86 +2,43 @@
 AHKVacuum = {}
 AHKVacuum.name = "AHKVacuum"
 --AHKVacuum.savedVars = {}
-local function newIndexedSet(...)
-	local retval = {}
-	for key,value in pairs(...) do
-		retval[key] = value
-	end
-	return retval
-end
---AHKVacuum.lootActions = {
---					["Bookshelf"] =	  1,
---					["Book Stack"] =	  1,
---			}
-AHKVacuum.ignoreSearch = {
-					["Bookshelf"] =	  1,
-					["Book Stack"] =	  1,
-			}
-AHKVacuum.ignoreTake = {
-					["Spoiled Food"] =	  1,
-					["Greatsword"] =	  1,
-					["Sword"] =	  1,
-					["Axe"] =	  1,
-					["Bow"] =	  1,
-					["Shield"] =	  1,
-					["Staff"] =	  1,
-					["Sabatons"] =	  1,
-					["Jerkin"] =	  1,
-					["Dagger"] =	  1,
-					["Cuirass"] =	  1,
-					["Pauldron"] =	  1,
-					["Helm"] =	  1,
-					["Gauntlets"] =	  1,
-					["Guards"] =	  1,
-					["Boots"] =	  1,
-					["Shoes"] =	  1,
-			}
-AHKVacuum.lootSearch = {
-					["Backpack"] =	   1,
-					["Barrel"] =		 1,
-					["Barrels"] =		1,
-					["Basket"] =		 1,
-					["Cabinet"] =		1,
-					["Cauldron"] =	   1,
-					["Crate"] =		  1,
-					["Crates"] =		 1,
-					["Dresser"] =		1,
-					["Keg"] =			1,
-					["Saltrice Sack"] =  1,
-					["Sack"] =		   1,
-					["Tomato Crate"] =   1,
-					["Wardrobe"] =	   1,
-			}
-AHKVacuum.lootTake = {
-					["Alchemy Bottle"] = 1,
-					["Apple"] =		  1,
-					["Banana"] =		 1,
-					["Bananas"] =		1,
-					["Bread"] =		  1,
-					["Drink"] =		  1,
-					["Cheese"] =		 1,
-					["Fish"] =		   1,
-					["Pie"] =			1,
-					["Poultry"] =		1,
-					["Rabbit"] =		 1,
-			}
-AHKVacuum.lootCollect = {
-					["Platinum Seam"] =  1,
-					["Nirnroot"] =	   1,
-			}
 local ptk = LibPixelControl
 local ms_time = GetGameTimeMilliseconds()
 local function dmsg(txt)
 	d((GetGameTimeMilliseconds() - ms_time) .. ") " .. txt)
 	ms_time = GetGameTimeMilliseconds()
 end
+local function newIndexedSet(...)
+	local retval = {}
+	for _,value in pairs({...}) do retval[value] = true end
+	return retval
+end
+local function newActionSet()
+	local retval = {
+			takeByDefault = true,
+			whitelist = {},
+			blacklist = {},
+		}
+	return retval
+end
+AHKVacuum.lootActions = {}
+AHKVacuum.lootActions["Search"] = newActionSet()
+AHKVacuum.lootActions["Search"].blacklist = newIndexedSet("Bookshelf","Book Stack")
+AHKVacuum.lootActions["Take"] = newActionSet()
+AHKVacuum.lootActions["Take"].blacklist = newIndexedSet("SpoiledFood","Greatsword","Sword","Axe","Bow","Shield","Staff","Sabatons","Jerkin","Dagger","Cuirass","Pauldron","Helm","Gauntlets","Guards","Boots","Shoes","Wasp","Fleshflies","Butterfly","Torchbug")
+AHKVacuum.lootActions["Collect"] = newActionSet()
+AHKVacuum.lootActions["Mine"] = newActionSet()
+AHKVacuum.lootActions["Cut"] = newActionSet()
+AHKVacuum.lootActions["Use"] = newActionSet()
+AHKVacuum.lootActions["Use"].takeByDefault = false
+AHKVacuum.lootActions["Use"].whitelist = newIndexedSet("Giant Clam")
+
 local prvAction, prvInteractableName, prvInteractBlocked, prvIsOwned, prvAdditionalInfo, prvContextualInfo, prvContextualLink, prvIsCriminalInteract = GetGameCameraInteractableActionInfo()
 local curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfo()
 local prvInteractionType = GetInteractionType()
 local curInteractionType = GetInteractionType()
 local isPressingRight, isPressingLeft, isPressingUp, isPressingDown = false, false, false, false
-local doAutomoveVacuumLoot = false
-local doVacuumLoot = false
+local doAutorunAfterLoot = false
 function AHKVacuum.PrintReticle(action, interactableName, interactBlocked, isOwned, additionalInfo, contextualInfo, contextualLink, isCriminalInteract)
 	--local action, interactableName, interactBlocked, isOwned, additionalInfo, contextualInfo, contextualLink, isCriminalInteract = GetGameCameraInteractableActionInfo()
 	d("---"
@@ -94,50 +51,26 @@ function AHKVacuum.PrintReticle(action, interactableName, interactBlocked, isOwn
 		.." ctxLink:"..tostring(contextualLink)
 		.." crim:"..tostring(isCriminalInteract))
 end
-function AHKVacuum.UpdateVacuumLoot()
-	local newVacuumLoot = (isPressingRight or isPressingLeft or isPressingUp or isPressingDown or doAutomoveVacuumLoot)
-	if newVacuumLoot ~= doVacuumLoot then
-		doVacuumLoot = newVacuumLoot
-	end
-	if isPressingUp or isPressingDown then
-		doAutomoveVacuumLoot = false
-	end
-end
 local function tapE() ptk.SetIndOnFor(ptk.VK_E, 50) end
---function AHKVacuum:ShopAutomoveToggle()
---	if not doAutomoveVacuumLoot then
---		ptk.SetIndOn (ptk.VK_W)
---		doAutomoveVacuumLoot = true
---	else
---		ptk.SetIndOff (ptk.VK_W)
---		doAutomoveVacuumLoot = false
---	end
---	AHKVacuum.UpdateVacuumLoot()
---end
+local function tapT() ptk.SetIndOnFor(ptk.VK_T, 50) end
 function AHKVacuum:ShopAutomoveToggle()
-	if not doVacuumLoot then
-		doVacuumLoot = true
+	if not doAutorunAfterLoot then
+		doAutorunAfterLoot = true
 		d("VacuumLoot ON")
+		tapT()
 	else
-		doVacuumLoot = false
+		doAutorunAfterLoot = false
 		d("VacuumLoot OFF")
 	end
 end
-function AHKVacuum:ShopDirectionRightOn()  ptk.SetIndOn (ptk.VK_D) isPressingRight = true  AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionRightOff() ptk.SetIndOff(ptk.VK_D) isPressingRight = false AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionLeftOn()   ptk.SetIndOn (ptk.VK_A) isPressingLeft = true   AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionLeftOff()  ptk.SetIndOff(ptk.VK_A) isPressingLeft = false  AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) isPressingUp = true     AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) isPressingUp = false    AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) isPressingDown = true   AHKVacuum.UpdateVacuumLoot() end
-function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) isPressingDown = false  AHKVacuum.UpdateVacuumLoot() end
---function AHKVacuum:ShopDirectionDownOn()   end
---function AHKVacuum:ShopDirectionDownOff()
---	--AHKVacuum.PrintReticle(prvAction, prvInteractableName, prvInteractBlocked, prvIsOwned, prvAdditionalInfo, prvContextualInfo, prvContextualLink, prvIsCriminalInteract)
---	--AHKVacuum.PrintReticle(curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract)
---	--AHKVacuum.PrintReticle(GetGameCameraInteractableActionInfo())
---	d("GetInteractionType:"..tostring(GetInteractionType()))
---end
+function AHKVacuum:ShopDirectionRightOn()  ptk.SetIndOn (ptk.VK_D) isPressingRight = true  end
+function AHKVacuum:ShopDirectionRightOff() ptk.SetIndOff(ptk.VK_D) isPressingRight = false end
+function AHKVacuum:ShopDirectionLeftOn()   ptk.SetIndOn (ptk.VK_A) isPressingLeft = true   end
+function AHKVacuum:ShopDirectionLeftOff()  ptk.SetIndOff(ptk.VK_A) isPressingLeft = false  end
+function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) isPressingUp = true     end
+function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) isPressingUp = false    end
+function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) isPressingDown = true   end
+function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) isPressingDown = false  end
 -- EVENT_INVENTORY_SINGLE_SLOT_UPDATE (number eventCode, Bag bagId, number slotId, boolean isNewItem, ItemUISoundCategory itemSoundCategory, number inventoryUpdateReason, number stackCountChange)
 function AHKVacuum.OnInventorySingleSlotUpdate(eventCode, bagId, slotId, isNewItem, itemSoundCategory, inventoryUpdateReason, stackCountChange)
 	EVENT_MANAGER:UnregisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE)
@@ -148,7 +81,7 @@ function AHKVacuum.HaltMovementToLoot()
 	dmsg("HaltMovementToLoot")
 	if isPressingRight then ptk.SetIndOff(ptk.VK_D) end
 	if isPressingLeft then ptk.SetIndOff(ptk.VK_A) end
-	if isPressingUp or doAutomoveVacuumLoot then ptk.SetIndOff(ptk.VK_W) end
+	if isPressingUp then ptk.SetIndOff(ptk.VK_W) end
 	if isPressingDown then ptk.SetIndOff(ptk.VK_S) end
 	tapE()
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, AHKVacuum.OnInventorySingleSlotUpdate)
@@ -157,9 +90,10 @@ function AHKVacuum.ResumeMovement()
 	dmsg("Looted. Resuming Movement")
 	if isPressingRight then ptk.SetIndOn(ptk.VK_D) end
 	if isPressingLeft then ptk.SetIndOn(ptk.VK_A) end
-	if isPressingUp or doAutomoveVacuumLoot then ptk.SetIndOn(ptk.VK_W) end
+	if isPressingUp then ptk.SetIndOn(ptk.VK_W) end
 	if isPressingDown then ptk.SetIndOn(ptk.VK_S) end
 	curInteractableName = nil
+	if doAutorunAfterLoot then tapT() end
 end
 function AHKVacuum.OnReticleSet()
 	prvAction, prvInteractableName, prvInteractBlocked, prvIsOwned, prvAdditionalInfo, prvContextualInfo, prvContextualLink, prvIsCriminalInteract = curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract
@@ -167,28 +101,39 @@ function AHKVacuum.OnReticleSet()
 	if curAction ~= prvAction or curInteractableName ~= prvInteractableName or curInteractBlocked ~= prvInteractBlocked then
 		AHKVacuum.OnReticleChanged()
 	end
-	--prvInteractionType = curInteractionType
-	--curInteractionType = GetInteractionType()
-	--if curInteractionType ~= prvInteractionType then
-	--	d("InteractionType Changed from "..tostring(prvInteractionType).." to "..tostring(curInteractionType))
-	--end
 end
 function AHKVacuum.OnReticleChanged()
-	if doVacuumLoot then -- don't do anything unless holding a key
-		if curInteractableName ~= nil then
-			AHKVacuum.PrintReticle(curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract)
-		end
-		if curInteractableName ~= nil
-			--and not curInteractBlocked
-			and not curIsCriminalInteract
-			and curAdditionalInfo == 0 -- not sure what this is but 2 is apparently when something is empty
-			and (curAction == "Search" or curAction == "Take" or curAction == "Collect" or curAction == "Mine" or curAction == "Cut")
-			and AHKVacuum.ignoreSearch[curInteractableName] == nil
+	--if IsMounted() then return end
+	if curInteractableName ~= nil
+		and not curInteractBlocked
+		and not curIsCriminalInteract
+		and curAdditionalInfo == 0 -- not sure what this is but 2 is apparently when something is empty
+		and AHKVacuum.lootActions[curAction] ~= nil
+	then
+		local lootAction = AHKVacuum.lootActions[curAction]
+		if (lootAction.takeByDefault and lootAction.blacklist[curInteractableName] == nil)
+			or lootAction.whitelist[curInteractableName] ~= nil
 		then
 			AHKVacuum.HaltMovementToLoot()
 		end
 	end
 end
+--function AHKVacuum.OnReticleChanged()
+--	if doAutorunAfterLoot then -- don't do anything unless holding a key
+--		if curInteractableName ~= nil then
+--			AHKVacuum.PrintReticle(curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract)
+--		end
+--		if curInteractableName ~= nil
+--			--and not curInteractBlocked
+--			and not curIsCriminalInteract
+--			and curAdditionalInfo == 0 -- not sure what this is but 2 is apparently when something is empty
+--			and (curAction == "Search" or curAction == "Take" or curAction == "Collect" or curAction == "Mine" or curAction == "Cut")
+--			and AHKVacuum.ignoreSearch[curInteractableName] == nil
+--		then
+--			AHKVacuum.HaltMovementToLoot()
+--		end
+--	end
+--end
 --function AHKVacuum.OnReticleChanged()
 --	if curInteractableName ~= nil and not curInteractBlocked and not curIsCriminalInteract and (curAction == "Search" or curAction == "Take" or curAction == "Collect" or curAction == "Mine" or curAction == "Cut") then
 --		if IsMounted() then return end
