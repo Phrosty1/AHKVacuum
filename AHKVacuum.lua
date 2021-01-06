@@ -1,12 +1,15 @@
 -- For menu & data
 AHKVacuum = {}
 AHKVacuum.name = "AHKVacuum"
---AHKVacuum.savedVars = {}
+AHKVacuum.savedVars = {}
 local ptk = LibPixelControl
+local verbose = false
 local ms_time = GetGameTimeMilliseconds()
 local function dmsg(txt)
-	d((GetGameTimeMilliseconds() - ms_time) .. ") " .. txt)
-	ms_time = GetGameTimeMilliseconds()
+	if verbose then
+		d((GetGameTimeMilliseconds() - ms_time) .. ") " .. txt)
+		ms_time = GetGameTimeMilliseconds()
+	end
 end
 local function newIndexedSet(...)
 	local retval = {}
@@ -32,6 +35,7 @@ AHKVacuum.lootActions["Cut"] = newActionSet()
 AHKVacuum.lootActions["Use"] = newActionSet()
 AHKVacuum.lootActions["Use"].takeByDefault = false
 AHKVacuum.lootActions["Use"].whitelist = newIndexedSet("Giant Clam")
+AHKVacuum.ridinglist = newIndexedSet("Giant Clam", "Platinum Seam", "Heavy Sack")
 
 local prvAction, prvInteractableName, prvInteractBlocked, prvIsOwned, prvAdditionalInfo, prvContextualInfo, prvContextualLink, prvIsCriminalInteract = GetGameCameraInteractableActionInfo()
 local curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfo()
@@ -41,7 +45,7 @@ local isPressingRight, isPressingLeft, isPressingUp, isPressingDown = false, fal
 local doAutorunAfterLoot = false
 function AHKVacuum.PrintReticle(action, interactableName, interactBlocked, isOwned, additionalInfo, contextualInfo, contextualLink, isCriminalInteract)
 	--local action, interactableName, interactBlocked, isOwned, additionalInfo, contextualInfo, contextualLink, isCriminalInteract = GetGameCameraInteractableActionInfo()
-	d("---"
+	dmsg("---"
 		.." act:"..tostring(action)
 		.." nm:"..tostring(interactableName)
 		.." blk:"..tostring(interactBlocked)
@@ -103,7 +107,6 @@ function AHKVacuum.OnReticleSet()
 	end
 end
 function AHKVacuum.OnReticleChanged()
-	--if IsMounted() then return end
 	if curInteractableName ~= nil
 		and not curInteractBlocked
 		and not curIsCriminalInteract
@@ -111,73 +114,21 @@ function AHKVacuum.OnReticleChanged()
 		and AHKVacuum.lootActions[curAction] ~= nil
 	then
 		local lootAction = AHKVacuum.lootActions[curAction]
-		if (lootAction.takeByDefault and lootAction.blacklist[curInteractableName] == nil)
-			or lootAction.whitelist[curInteractableName] ~= nil
-		then
-			AHKVacuum.HaltMovementToLoot()
+		if ((lootAction.takeByDefault and lootAction.blacklist[curInteractableName] == nil) or lootAction.whitelist[curInteractableName] ~= nil) then
+			if not IsMounted() then
+				AHKVacuum.HaltMovementToLoot()
+			elseif AHKVacuum.ridinglist[curInteractableName] ~= nil then
+				AHKVacuum.HaltMovementToLoot()
+			end
 		end
 	end
+	if curAction ~= nil and curInteractableName ~= nil then
+		local idxAction = curAction or "blank"
+		if not AHKVacuum.savedVars[idxAction] then AHKVacuum.savedVars[idxAction] = {} end
+		--AHKVacuum.savedVars[idxAction][curInteractableName] = {GetGameCameraInteractableActionInfo()}
+		AHKVacuum.savedVars[idxAction][curInteractableName] = {curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract}
+	end
 end
---function AHKVacuum.OnReticleChanged()
---	if doAutorunAfterLoot then -- don't do anything unless holding a key
---		if curInteractableName ~= nil then
---			AHKVacuum.PrintReticle(curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract)
---		end
---		if curInteractableName ~= nil
---			--and not curInteractBlocked
---			and not curIsCriminalInteract
---			and curAdditionalInfo == 0 -- not sure what this is but 2 is apparently when something is empty
---			and (curAction == "Search" or curAction == "Take" or curAction == "Collect" or curAction == "Mine" or curAction == "Cut")
---			and AHKVacuum.ignoreSearch[curInteractableName] == nil
---		then
---			AHKVacuum.HaltMovementToLoot()
---		end
---	end
---end
---function AHKVacuum.OnReticleChanged()
---	if curInteractableName ~= nil and not curInteractBlocked and not curIsCriminalInteract and (curAction == "Search" or curAction == "Take" or curAction == "Collect" or curAction == "Mine" or curAction == "Cut") then
---		if IsMounted() then return end
---		local txt = curAction.." - "..curInteractableName
---		local doLog = false
---		local doPressE = false
---		if (curAction == "Search" or curAction == "Take" or curAction == "Collect" or curAction == "Mine" or curAction == "Cut") and AHKVacuum.ignoreSearch[curInteractableName] == nil then -- remove
---			doPressE = true
---			doLog = true
---		end
---		if curAction == "Search" then
---			if AHKVacuum.lootSearch[curInteractableName] then doPressE = true
---			else doLog = true
---			end
---		elseif curAction == "Take" then
---			if AHKVacuum.lootTake[curInteractableName] then doPressE = true
---			else doLog = true
---			end
---		elseif curAction == "Collect" or curAction == "Mine" or curAction == "Cut" then
---			if AHKVacuum.lootCollect[curInteractableName] then doPressE = true
---			else doLog = true
---			end
---		else
---			doLog = true
---		end
---		doLog = true -- remove
---		if doPressE then
---			EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, AHKVacuum.OnInventorySingleSlotUpdate)
---			zo_callLater(function() EVENT_MANAGER:UnregisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE) end, 200)
---			tapE()
---			txt = txt..". Pressing E."
---		end
---		if doLog then
---			local idxAction = curAction or "blank"
---			if not AHKVacuum.savedVars[idxAction] then AHKVacuum.savedVars[idxAction] = {} end
---			AHKVacuum.savedVars[idxAction][curInteractableName] = {GetGameCameraInteractableActionInfo()}
---			txt = txt..". Logged."
---		end
---		if not doPressE and not doLog then
---			txt = txt..". Ignored."
---		end
---		dmsg(txt)
---	end
---end
 
 function AHKVacuum:Initialize()
 	ZO_CreateStringId("SI_BINDING_NAME_VACUUM_AUTOMOVE", "Vacuum Shop Automove")
@@ -188,54 +139,6 @@ function AHKVacuum:Initialize()
 	ZO_PreHookHandler(RETICLE.interact, "OnEffectivelyShown", AHKVacuum.OnReticleSet)
 	ZO_PreHookHandler(RETICLE.interact, "OnHide", AHKVacuum.OnReticleSet)
 	AHKVacuum.savedVars = ZO_SavedVars:NewAccountWide(AHKVacuum.name.."SavedVariables", 1, nil, {})
-	AHKVacuum.savedVars.ignoreSearch = {"Bookshelf","Book Stack"}
-	--AHKVacuum.savedVars["lootSearch"] = AHKVacuum.lootSearch
-	--AHKVacuum.savedVars["lootTake"] = AHKVacuum.lootTake
-	--AHKVacuum.savedVars["lootCollect"] = AHKVacuum.lootCollect
-
-
---local isAutoRunning = false
----- https://wiki.esoui.com/ZO_PreHook
----- ZO_PreHookHandler(control, handlerName, hookFunction)
----- ZO_PreHook(objectTable, existingFunctionName, hookFunction)
----- SecurePostHook
----- ZO_PostHookHandler
----- ToggleAutoRun
---EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CONFIRM_INTERACT, AHKVacuum.OnConfirmInteract)
---EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INTERACT_BUSY, AHKVacuum.OnInteractBusy)
---EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CONFIRM_INTERACT, AHKVacuum.OnNoInteractTarget)
---SecurePostHook("EndInteraction", function() d("Someone wants to know if EndInteraction was done") end) -- EndInteraction(number interactionType)
---SecurePostHook("EndLooting", function() d("Someone wants to know if EndLooting was done") end)
-----SecurePostHook(ZO_Reticle, "UpdateInteractText", function() d("UpdateInteractText") end)
---SecurePostHook(GamepadChatContainer, "UpdateInteractivity", function() d("GamepadChatContainer:UpdateInteractivity") end)
---SecurePostHook(ChatContainer, "UpdateInteractivity", function() d("ChatContainer:UpdateInteractivity") end)
---SecurePostHook("FishingManager:StartInteraction", function() d("FishingManager:StartInteraction") end)
---SecurePostHook("TakeLoot", function() d("TakeLoot") end)
---SecurePostHook("ZO_Loot_Shared:LootAllItems", function() d("ZO_Loot_Shared:LootAllItems") end)
----- EVENT_CONFIRM_INTERACT (number eventCode, string dialogTitle, string dialogBody, string acceptText, string cancelText)
---function AHKVacuum.OnConfirmInteract(eventCode, dialogTitle, dialogBody, acceptText, cancelText)
---	dmsg("OnConfirmInteract")
---	d("GetInteractionType:"..tostring(GetInteractionType()))
---end
-----EVENT_INTERACT_BUSY (number eventCode)
-----EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INTERACT_BUSY, AHKVacuum.OnInteractBusy)
---function AHKVacuum.OnInteractBusy(eventCode, dialogTitle, dialogBody, acceptText, cancelText)
---	dmsg("OnInteractBusy")
---	d("GetInteractionType:"..tostring(GetInteractionType()))
---end
-----EVENT_NO_INTERACT_TARGET (number eventCode)
-----EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CONFIRM_INTERACT, AHKVacuum.OnNoInteractTarget)
---function AHKVacuum.OnNoInteractTarget(eventCode, dialogTitle, dialogBody, acceptText, cancelText)
---	dmsg("OnNoInteractTarget")
---	d("GetInteractionType:"..tostring(GetInteractionType()))
---end
-
---GamepadChatContainer:UpdateInteractivity(isInteractive)
---ChatContainer:UpdateInteractivity(isInteractive)
---FishingManager:StartInteraction()?
---TakeLoot(slot)
---ZO_Loot_Shared:LootAllItems()
-
 
 	SLASH_COMMANDS["/keybindssave"] = KeybindsSave
 	SLASH_COMMANDS["/keybindsreset"] = KeybindsReset
