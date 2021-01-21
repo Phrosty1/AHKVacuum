@@ -18,7 +18,7 @@ local function newIndexedSet(...)
 	return retval
 end
 local actionsToTakeByDefault = newIndexedSet("Search","Take","Collect","Mine","Cut","Unlock","Dig","Dig Up","Fish","Reel In")
-local blacklist = newIndexedSet("Bookshelf","Book Stack", "SpoiledFood","Greatsword","Sword","Axe","Bow","Shield","Staff","Sabatons","Jerkin","Dagger","Cuirass","Pauldron","Helm","Gauntlets","Guards","Boots","Shoes","Wasp","Fleshflies","Butterfly","Torchbug")
+local blacklist = newIndexedSet("Bookshelf","Book Stack", "Spoiled Food","Greatsword","Sword","Axe","Bow","Shield","Staff","Sabatons","Jerkin","Dagger","Cuirass","Pauldron","Helm","Gauntlets","Guards","Boots","Shoes","Wasp","Fleshflies","Butterfly","Torchbug")
 local whitelist = newIndexedSet("Giant Clam", "Platinum Seam", "Heavy Sack", "Heavy Crate", "Chest", "Hidden Treasure", "Dirt Mound")
 -- Local references for eso functions
 local IsPlayerTryingToMoveLoc = IsPlayerTryingToMove -- Returns: boolean tryingToMove
@@ -44,26 +44,14 @@ end
 local function tapH()
 	ptk.SetIndOnFor(ptk.VK_H, 50)
 end
-local function donePressing()
-	isPressingKey = false
-end
-function AHKVacuum:ShopAutomoveToggle()
-	if not doRidePickupAll then
-		doRidePickupAll = true
-		d("Vacuum ON")
-	else
-		doRidePickupAll = false
-		d("Vacuum OFF")
-	end
-end
-function AHKVacuum:ShopDirectionRightOn()  ptk.SetIndOn (ptk.VK_D) isPressingRight = true  end
-function AHKVacuum:ShopDirectionRightOff() ptk.SetIndOff(ptk.VK_D) isPressingRight = false end
-function AHKVacuum:ShopDirectionLeftOn()   ptk.SetIndOn (ptk.VK_A) isPressingLeft = true   end
-function AHKVacuum:ShopDirectionLeftOff()  ptk.SetIndOff(ptk.VK_A) isPressingLeft = false  end
-function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) isPressingUp = true     end
-function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) isPressingUp = false    end
---function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) isPressingDown = true   end
---function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) isPressingDown = false  end
+function AHKVacuum:ShopDirectionRightOn()  ptk.SetIndOn (ptk.VK_D) end
+function AHKVacuum:ShopDirectionRightOff() ptk.SetIndOff(ptk.VK_D) end
+function AHKVacuum:ShopDirectionLeftOn()   ptk.SetIndOn (ptk.VK_A) end
+function AHKVacuum:ShopDirectionLeftOff()  ptk.SetIndOff(ptk.VK_A) end
+function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) end
+function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) end
+--function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) end
+--function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) end
 function AHKVacuum:ShopDirectionDownOn()
 	local action, interactableName, interactBlocked, isOwned, additionalInfo, contextualInfo, contextualLink, isCriminalInteract = GetGameCameraInteractableActionInfo()
 	d("".." act:"..tostring(action)
@@ -88,9 +76,21 @@ function AHKVacuum:ShopDirectionDownOn()
 	--ZO_PlayerToPlayer:IsReticleTargetInteractable
 	d("isPressingKey:"..tostring(isPressingKey).." isInteracting:"..tostring(isInteracting))
 end
-function AHKVacuum:ShopDirectionDownOff()
+function AHKVacuum:ShopDirectionDownOff() end
+function AHKVacuum:ShopAutomoveToggle()
+	if not doRidePickupAll then
+		doRidePickupAll = true
+		d("Horse Vacuum ON")
+	else
+		doRidePickupAll = false
+		d("Horse Vacuum OFF")
+	end
 end
 
+local function CurFocus()
+	curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
+	return " - "..tostring(curAction).."/"..tostring(curInteractableName)
+end
 
 local function IsCurFocusSetForInteract()
 	if curAction ~= nil and curInteractableName ~= nil
@@ -101,8 +101,9 @@ local function IsCurFocusSetForInteract()
 			or curAdditionalInfo == ADDITIONAL_INTERACT_INFO_FISHING_NODE)
 		and blacklist[curInteractableName] == nil
 		and (whitelist[curInteractableName] ~= nil
-			or (actionsToTakeByDefault[curAction] ~= nil and doRidePickupAll and not IsUnitInCombatLoc("player") )
-			or (actionsToTakeByDefault[curAction] ~= nil and not IsMountedLoc() and not IsUnitInCombatLoc("player") ) )
+			or (actionsToTakeByDefault[curAction] ~= nil
+				and (doRidePickupAll or not IsMountedLoc() )
+				and not IsUnitInCombatLoc("player") ) )
 	then
 		return true
 	else
@@ -118,33 +119,30 @@ function AHKVacuum.OnReticleSet()
 			if IsMountedLoc() then wasMountedBeforeLooting = true end
 			isPressingKey = true
 			ptk.SetIndOnFor(ptk.VK_E, 50)
-			zo_callLater(function() isPressingKey = false end, 200)
+			--if wasMountedBeforeLooting then
+			--	zo_callLater(function() isPressingKey = false end, 1000)
+			--else
+			--	zo_callLater(function() isPressingKey = false end, 100)
+			--end
 			dmsg("curInteractableName:"..tostring(curInteractableName).." Pressing:"..tostring(isPressingKey).." isInteracting:"..tostring(isInteracting))
 		end
 
 	end
 end
 function AHKVacuum.OnBeginInteracting()
+	isPressingKey = false
 	isInteracting = true
-	dmsg("OnBeginInteracting".." Pressing:"..tostring(isPressingKey).." isInteracting:"..tostring(isInteracting))
+	dmsg("ONBEGININTERACTING OnBeginInteracting".." Pressing:"..tostring(isPressingKey).." isInteracting:"..tostring(isInteracting))
 end
 function AHKVacuum.OnFinishInteracting()
 	if isInteracting then
 		dmsg("OnFinishInteracting")
 		isPressingKey = false
 		isInteracting = false
-		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
+		-- Since we finished, do a manual check to determine whether to interact again or resume actions
 		AHKVacuum.OnReticleSet()
-		dmsg("after OnReticleSet movement:"..tostring(curInteractableName).." Pressing:"..tostring(isPressingKey).." isInteracting:"..tostring(isInteracting))
+		dmsg("after OnReticleSet movement:".." NextItem:"..tostring(curInteractableName).." Pressing:"..tostring(isPressingKey).." isInteracting:"..tostring(isInteracting))
 		if not isPressingKey then
-			dmsg("resume movement:"..tostring(curInteractableName).." Pressing:"..tostring(isPressingKey).." isInteracting:"..tostring(isInteracting))
-			--isPressingKey = true
-
-			--if wasMovingBeforeLooting then
-			--	tapT()
-			--	zo_callLater(function() isPressingKey = false end, 200)
-			--end
-
 			if wasMountedBeforeLooting and wasMovingBeforeLooting then
 				d("wasMountedBeforeLooting and wasMovingBeforeLooting")
 				isPressingKey = true
@@ -162,7 +160,6 @@ function AHKVacuum.OnFinishInteracting()
 				zo_callLater(tapH, 0)
 				zo_callLater(function() isPressingKey = false end, 200)
 			end
-
 			wasMountedBeforeLooting = false
 			wasMovingBeforeLooting = false
 		end
@@ -176,15 +173,96 @@ function AHKVacuum:Initialize()
 	ZO_CreateStringId("SI_BINDING_NAME_VACUUM_LEFT", "Vacuum Shop Left")
 	ZO_CreateStringId("SI_BINDING_NAME_VACUUM_UP", "Vacuum Shop Up")
 	ZO_CreateStringId("SI_BINDING_NAME_VACUUM_DOWN", "Vacuum Shop Down")
-	ZO_PreHookHandler(RETICLE.interact, "OnEffectivelyShown", AHKVacuum.OnReticleSet)
-	ZO_PreHookHandler(RETICLE.interact, "OnHide", AHKVacuum.OnReticleSet)
 	AHKVacuum.savedVars = ZO_SavedVars:NewAccountWide(AHKVacuum.name.."SavedVariables", 1, nil, {})
 
+	ZO_PreHookHandler(RETICLE.interact, "OnEffectivelyShown", AHKVacuum.OnReticleSet)
+	ZO_PreHookHandler(RETICLE.interact, "OnHide", AHKVacuum.OnReticleSet)
 	SecurePostHook (ZO_Fishing, "StartInteraction", AHKVacuum.OnBeginInteracting) -- begin harvesting/fishing/searching/taking
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CHATTER_END, AHKVacuum.OnFinishInteracting) -- end of harvesting/fishing/not-searching(should work with onLootClosed)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting) -- pretty good for indicating done with harvesting/searching
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_RECEIVED, AHKVacuum.OnFinishInteracting) -- pretty good for indicating fast looted
+	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_RECEIVED, AHKVacuum.OnFinishInteracting) -- pretty good for indicating fast looted
+	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, AHKVacuum.OnFinishInteracting) -- when fishing finished
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_NO_INTERACT_TARGET, AHKVacuum.OnFinishInteracting) -- if the E misses
+	-- Hits E twice when beginning fishing
+
+	--SecurePostHook (ZO_Fishing, "StartInteraction", function() dmsg("StartInteraction"..CurFocus()) end)
+	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CHATTER_END, function() dmsg("EVENT_CHATTER_END"..CurFocus()) end)
+	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_CLOSED, function() dmsg("EVENT_LOOT_CLOSED"..CurFocus()) end)
+	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_RECEIVED, function() dmsg("EVENT_LOOT_RECEIVED"..CurFocus()) end)
+	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, function() dmsg("EVENT_INVENTORY_SINGLE_SLOT_UPDATE"..CurFocus()) end)
+	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_NO_INTERACT_TARGET, function() dmsg("EVENT_NO_INTERACT_TARGET"..CurFocus()) end)
+
+--Nothing
+--XXXXX	StartInteraction -- Pressed E
+--3		EVENT_NO_INTERACT_TARGET
+
+--Fishing and catch
+--XXXXX	StartInteraction (Fish/Lake Fishing Hole) -- Pressed E
+--21000	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (Reel In/Lake Fishing Hole)	-- Bait taken
+--1500	StartInteraction (Reel In/Lake Fishing Hole) -- Pressed E
+--100	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (Fish/Lake Fishing Hole) -- Fish deposited?
+--0		EVENT_LOOT_RECEIVED (Fish/Lake Fishing Hole)
+--0		EVENT_LOOT_CLOSED (Fish/Lake Fishing Hole)
+--0		EVENT_CHATTER_END (Fish/Lake Fishing Hole)
+
+--Collect Water
+--XXXXX	StartInteraction (Collect/Pure Water) -- Pressed E
+--2000	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Ore deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_LOOT_CLOSED (nil/nil)
+--0		EVENT_CHATTER_END (nil/nil)
+
+--Mine Platinum
+--XXXXX	StartInteraction (Mine/Platinum Seam) -- Pressed E
+--1800	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Ore deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Ochre deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Potent Nirncrux deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_LOOT_CLOSED (nil/nil)
+--0		EVENT_CHATTER_END (nil/nil)
+
+--Backpack
+--XXXXX	StartInteraction (Search/Backpack) -- Pressed E
+--122	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (Search/Backpack) -- Ore deposited
+--0		EVENT_LOOT_RECEIVED (Search/Backpack)
+--0		EVENT_LOOT_CLOSED (Search/Backpack)
+--0		EVENT_CHATTER_END (Search/Backpack)
+
+--Poultry
+--XXXXX	StartInteraction (Take/Poultry) -- Pressed E
+--150	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Poultry deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_CHATTER_END (nil/nil)
+
+--Heavy Sack
+--XXXXX	StartInteraction (Search/Heavy Sack) -- Pressed E
+--1524	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- 10 Ore deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_LOOT_CLOSED (nil/nil)
+--0		EVENT_CHATTER_END (nil/nil)
+
+--Unlock Chest
+--XXXXX	StartInteraction (Unlock/Chest) -- Pressed E
+--		BeginLockpicking
+--		EndLockpicking
+--6000	EVENT_CHATTER_END (Unlock/Chest)
+--2181	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Misc/Junk deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Misc/Junk deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Misc/Junk deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Misc/Junk deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_LOOT_CLOSED (nil/nil)
+--0		EVENT_CHATTER_END (nil/nil)
+--148	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Misc/Junk deposited
+
+--Lootable body
+--XXXXX	StartInteraction (Search/Iron Orc Thundermaul) -- Pressed E
+--102	EVENT_LOOT_CLOSED (Search/Iron Orc Thundermaul) -- 32 Gold acquired
 
 	SLASH_COMMANDS["/keybindssave"] = KeybindsSave
 	SLASH_COMMANDS["/keybindsreset"] = KeybindsReset
