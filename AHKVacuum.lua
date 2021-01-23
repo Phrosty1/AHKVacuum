@@ -19,7 +19,7 @@ local function newIndexedSet(...)
 end
 local actionsToTakeByDefault = newIndexedSet("Search","Take","Collect","Mine","Cut","Unlock","Dig","Dig Up","Fish") -- ,"Reel In"
 local blacklist = newIndexedSet("Bookshelf","Book Stack", "Spoiled Food","Greatsword","Sword","Axe","Bow","Shield","Staff","Sabatons","Jerkin","Dagger","Cuirass","Pauldron","Helm","Gauntlets","Guards","Boots","Shoes","Wasp","Fleshflies","Butterfly","Torchbug")
-local whitelist = newIndexedSet("Giant Clam", "Platinum Seam", "Heavy Sack", "Heavy Crate", "Chest", "Hidden Treasure", "Dirt Mound")
+local whitelist = newIndexedSet("Giant Clam", "Platinum Seam", "Heavy Sack", "Heavy Crate", "Chest", "Hidden Treasure", "Dirt Mound", "Skyshard", "Steam Pipe")
 -- Local references for eso functions
 local IsPlayerTryingToMoveLoc = IsPlayerTryingToMove -- Returns: boolean tryingToMove
 local IsMountedLoc = IsMounted -- Returns: boolean mounted
@@ -114,6 +114,7 @@ function AHKVacuum.OnReticleSet()
 	if not isPressingKey and not isInteracting and not isFinishing then
 		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
 		if IsCurFocusSetForInteract() then
+			AHKVacuum.ClearInteraction()
 			if IsPlayerTryingToMoveLoc() then wasMovingBeforeLooting = true end
 			if IsMountedLoc() then wasMountedBeforeLooting = true end
 			tapE()
@@ -140,7 +141,7 @@ function AHKVacuum.OnFinishInteracting()
 		--EVENT_MANAGER:UnregisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED)
 		-- Since we finished, do a manual check to determine whether to interact again or resume actions
 		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
-		dmsg("NextItem:"..tostring(curInteractableName).." Pressing:"..tostring(isPressingKey).." isInteracting:"..tostring(isInteracting))
+		dmsg("NextItem:"..tostring(curInteractableName).." Pressing:"..tostring(isPressingKey).." isInteracting:"..tostring(isInteracting).." isFinishing:"..tostring(isFinishing))
 		-- If there's another thing to loot then do it, otherwise resume movement
 		if IsCurFocusSetForInteract() then
 			local delay = 0
@@ -149,13 +150,14 @@ function AHKVacuum.OnFinishInteracting()
 			elseif curInteractableName=="Chest" then
 				delay = 200
 			elseif curAction=="Take" then
-				delay = 0
+				delay = 200
 			else
-				delay = 0
+				delay = 200
 			end
 			zo_callLater(tapE, delay)
 			dmsg("OnFinishInteracting -"..CurFocus())
 		else
+			if not doRidePickupAll then wasMountedBeforeLooting = false end
 			local t = 0
 			if wasMountedBeforeLooting and wasMovingBeforeLooting then
 				d("wasMountedBeforeLooting and wasMovingBeforeLooting")
@@ -235,9 +237,8 @@ function AHKVacuum:Initialize()
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CHATTER_END, AHKVacuum.OnFinishInteracting) -- end of harvesting/fishing/not-searching(should work with onLootClosed)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting) -- seems to be needed for Search of bodies
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_RECEIVED, AHKVacuum.OnFinishInteracting) -- pretty good for indicating fast looted
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, AHKVacuum.HookFish)
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_NO_INTERACT_TARGET, AHKVacuum.OnFinishInteracting) -- if the E misses
-	-- Hits E twice when beginning fishing
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, AHKVacuum.HookFish)
 
 	--SecurePostHook (ZO_Fishing, "StartInteraction", function() dmsg("StartInteraction"..CurFocus()) end)
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CHATTER_END, function(...) dmsg("EVENT_CHATTER_END"..CurFocus()) d({...}) end)
@@ -245,6 +246,12 @@ function AHKVacuum:Initialize()
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_RECEIVED, function(...) dmsg("EVENT_LOOT_RECEIVED"..CurFocus()) d({...}) end)
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, function(...) dmsg("EVENT_INVENTORY_SINGLE_SLOT_UPDATE"..CurFocus()) d({...}) end)
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_NO_INTERACT_TARGET, function(...) dmsg("EVENT_NO_INTERACT_TARGET"..CurFocus()) d({...}) end)
+
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CHATTER_END, function() dmsg("EVENT_CHATTER_END"..CurFocus()) d() end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_CLOSED, function() dmsg("EVENT_LOOT_CLOSED"..CurFocus()) d() end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_RECEIVED, function() dmsg("EVENT_LOOT_RECEIVED"..CurFocus()) d() end)
+	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, function() dmsg("EVENT_INVENTORY_SINGLE_SLOT_UPDATE"..CurFocus()) d() end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_NO_INTERACT_TARGET, function() dmsg("EVENT_NO_INTERACT_TARGET"..CurFocus()) d() end)
 
 --Nothing
 --XXXXX	StartInteraction -- Pressed E
