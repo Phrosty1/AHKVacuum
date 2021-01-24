@@ -233,6 +233,7 @@ function AHKVacuum:Initialize()
 	-- Don't really have a good way of finding if something interrupted us
 	-- so interact with nothing to reset the search
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_NO_INTERACT_TARGET, AHKVacuum.ClearInteraction)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_ITEM_FAILED, AHKVacuum.ClearInteraction)
 
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CHATTER_END, AHKVacuum.OnFinishInteracting) -- end of harvesting/fishing/not-searching(should work with onLootClosed)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting) -- seems to be needed for Search of bodies
@@ -246,10 +247,11 @@ function AHKVacuum:Initialize()
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_RECEIVED, function(...) dmsg("EVENT_LOOT_RECEIVED"..CurFocus()) d({...}) end)
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, function(...) dmsg("EVENT_INVENTORY_SINGLE_SLOT_UPDATE"..CurFocus()) d({...}) end)
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_NO_INTERACT_TARGET, function(...) dmsg("EVENT_NO_INTERACT_TARGET"..CurFocus()) d({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_ITEM_FAILED, function(...) dmsg("EVENT_LOOT_ITEM_FAILED"..CurFocus()) d({...}) end)
 
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CHATTER_END, function() dmsg("EVENT_CHATTER_END"..CurFocus()) d() end)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_CLOSED, function() dmsg("EVENT_LOOT_CLOSED"..CurFocus()) d() end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_RECEIVED, function() dmsg("EVENT_LOOT_RECEIVED"..CurFocus()) d() end)
+	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_RECEIVED, function() dmsg("EVENT_LOOT_RECEIVED"..CurFocus()) d() end)
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, function() dmsg("EVENT_INVENTORY_SINGLE_SLOT_UPDATE"..CurFocus()) d() end)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_NO_INTERACT_TARGET, function() dmsg("EVENT_NO_INTERACT_TARGET"..CurFocus()) d() end)
 
