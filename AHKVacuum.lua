@@ -12,6 +12,11 @@ local function dmsg(txt)
 		ms_time = GetGameTimeMillisecondsLoc()
 	end
 end
+local function BoolDecode(boolVal, trueStr, falseStr)
+	if boolVal==true then return trueStr
+	elseif boolVal==false then return falseStr
+	else return tostring(boolVal) end
+end
 local function newIndexedSet(...)
 	local retval = {}
 	for _,value in pairs({...}) do retval[value] = true end
@@ -33,11 +38,17 @@ local isPressingKey = false
 local isInteracting = false
 local isFinishing = false
 local doRidePickupAll = false
+local handleFailSafe = nil
 
 local function tapE()
 	isPressingKey = true
+	isInteracting = false
+	isFinishing = false
 	dmsg("Tap E")
 	ptk.SetIndOnFor(ptk.VK_E, 50)
+
+	handleFailSafe = zo_callLater(AHKVacuum.ClearInteraction, 100) -- refresh if no event occurs
+	--dmsg("handleFailSafe:"..tostring(handleFailSafe))
 end
 local function tapT()
 	ptk.SetIndOnFor(ptk.VK_T, 50)
@@ -47,31 +58,22 @@ local function tapH()
 end
 local function CurFocus()
 	curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
-local retval = " - "..tostring(curAction).."/"..tostring(curInteractableName)
-	local strBlocked = "NotBlocked"
-	if curInteractBlocked then retval = retval.."/".."Blocked" else retval = retval.."/".."NotBlocked" end
-	if CanInteractWithItem() then retval = retval.."/".."CanInteract" else retval = retval.."/".."CanNotInteract" end
-	if IsInteracting() then retval = retval.."/".."IsInteracting" else retval = retval.."/".."IsNotInteracting" end
+	local retval = " - "..tostring(curAction).."/"..tostring(curInteractableName)
+					.."/"..BoolDecode(curInteractBlocked, "Blocked", "NotBlocked")
+					.."/"..BoolDecode(CanInteractWithItem(), "CanInteract", "CanNotInteract")
+					.."/"..BoolDecode(IsInteracting(), "IsInteracting", "IsNotInteracting")
+					.."/"..BoolDecode(IsPlayerTryingToMoveLoc(), "TryingToMove", "NotTryingToMove")
 	return retval
 end
-function AHKVacuum:ShopDirectionRightOn()  ptk.SetIndOn (ptk.VK_D) end
-function AHKVacuum:ShopDirectionRightOff() ptk.SetIndOff(ptk.VK_D) end
-function AHKVacuum:ShopDirectionLeftOn()   ptk.SetIndOn (ptk.VK_A) end
-function AHKVacuum:ShopDirectionLeftOff()  ptk.SetIndOff(ptk.VK_A) end
-function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) end
-function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) end
-function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) end
-function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) end
-function AHKVacuum:ShopAutomoveToggle()
-	if not doRidePickupAll then
-		doRidePickupAll = true
-		d("Horse Vacuum ON")
-	else
-		doRidePickupAll = false
-		d("Horse Vacuum OFF")
-	end
+function AHKVacuum.ClearInteraction()
+	dmsg("ClearInteraction"..CurFocus())
+	isPressingKey = false
+	isInteracting = false
+	isFinishing = false
+	wasMovingBeforeLooting = false
+	wasMountedBeforeLooting = false
 end
-local function IsCurFocusSetForInteract()
+local function IsApprovedInteractable()
 	if curAction ~= nil and curInteractableName ~= nil
 		and not curInteractBlocked
 		and not curIsCriminalInteract
@@ -83,65 +85,64 @@ local function IsCurFocusSetForInteract()
 			or (actionsToTakeByDefault[curAction] ~= nil
 				and (doRidePickupAll or not IsMountedLoc() )
 				and not IsUnitInCombatLoc("player") ) )
-	then
-		return true
-	else
-		return false
-	end
+	then return true else return false end
 end
-
 function AHKVacuum.OnReticleSet()
 	if not isPressingKey and not isInteracting and not isFinishing then
 		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
-		if IsCurFocusSetForInteract() then
-			AHKVacuum.ClearInteraction()
+		if IsApprovedInteractable() then
+			dmsg("OnReticleSet"..CurFocus())
 			if IsPlayerTryingToMoveLoc() then wasMovingBeforeLooting = true end
 			if IsMountedLoc() then wasMountedBeforeLooting = true end
 			tapE()
-			dmsg("OnReticleSet -"..CurFocus())
 		end
 	end
 end
-function AHKVacuum.ClearInteraction()
-	isPressingKey = false
-	isInteracting = false
-	isFinishing = false
-	--EVENT_MANAGER:UnregisterForEvent(AHKVacuum.name, EVENT_CHATTER_END)
-	--EVENT_MANAGER:UnregisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED)
+function AHKVacuum.OnBeginInteracting()
+	EVENT_MANAGER:UnregisterForUpdate("CallLaterFunction"..handleFailSafe) --clear handleFailSafe
+	if isPressingKey then -- if instigated by us
+		dmsg("OnBeginInteracting"..CurFocus())
+		if IsPlayerTryingToMoveLoc() then
+			zo_callLater(AHKVacuum.ClearInteraction, 100)
+		else
+			isInteracting = true
+			isPressingKey = false
+			isFinishing = false
+		end
+	end
 end
 function AHKVacuum.OnFinishInteracting()
+	--dmsg("OnFinishInteracting"
+	--				.." "..BoolDecode(isPressingKey, "PressingKey", "NotPressingKey")
+	--				.."/"..BoolDecode(isInteracting, "Interacting", "NotInteracting")
+	--				.."/"..BoolDecode(isFinishing, "Finishing", "NotFinishing"))
+	--clear handleFailSafe
 	if isInteracting then
-		isInteracting = false
+		dmsg("OnFinishInteracting"..CurFocus())
 		isFinishing = true
-		dmsg("OnFinishInteracting")
-		-- We can't use ClearInteraction since it unsets isInteracting briefly and we don't want OnReticleSet to accidentally fire
-		--isPressingKey = false
-		--isInteracting = false
-		--EVENT_MANAGER:UnregisterForEvent(AHKVacuum.name, EVENT_CHATTER_END)
-		--EVENT_MANAGER:UnregisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED)
+		isInteracting = false
 		-- Since we finished, do a manual check to determine whether to interact again or resume actions
 		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
-		dmsg("NextItem:"..tostring(curInteractableName).." Pressing:"..tostring(isPressingKey).." isInteracting:"..tostring(isInteracting).." isFinishing:"..tostring(isFinishing))
 		-- If there's another thing to loot then do it, otherwise resume movement
-		if IsCurFocusSetForInteract() then
+		if IsApprovedInteractable() then
+			d("Interact with next item:"..CurFocus())
 			local delay = 0
-			if curAction=="Fish" or curAction=="Reel In" then
-				delay = 200
-			elseif curInteractableName=="Chest" then
-				delay = 200
-			elseif curAction=="Take" then
-				delay = 200
-			else
-				delay = 200
-			end
+			--if curAction=="Fish" or curAction=="Reel In" then
+			--	delay = 200
+			--elseif curInteractableName=="Chest" then
+			--	delay = 200
+			--elseif curAction=="Take" then
+			--	delay = 200
+			--else
+			--	delay = 200
+			--end
 			zo_callLater(tapE, delay)
-			dmsg("OnFinishInteracting -"..CurFocus())
 		else
 			if not doRidePickupAll then wasMountedBeforeLooting = false end
 			local t = 0
 			if wasMountedBeforeLooting and wasMovingBeforeLooting then
 				d("wasMountedBeforeLooting and wasMovingBeforeLooting")
-				zo_callLater(tapH, t) t=t+200
+				if not IsMountedLoc() then zo_callLater(tapH, t) t=t+200 end
 				zo_callLater(tapT, t) t=t+200
 			elseif wasMovingBeforeLooting then
 				d("wasMovingBeforeLooting")
@@ -151,43 +152,7 @@ function AHKVacuum.OnFinishInteracting()
 				zo_callLater(tapT, t) t=t+200
 			end
 			zo_callLater(AHKVacuum.ClearInteraction, t) -- We hold isInteracting as true until we're done hitting keys then we're back to searching
-			wasMountedBeforeLooting = false
-			wasMovingBeforeLooting = false
 		end
-	end
-end
-function AHKVacuum.OnBeginInteracting()
-	if isPressingKey then -- if instigated by us
-		-- We can't use ClearInteraction since it unsets isInteracting briefly and we don't want OnReticleSet to accidentally fire
-		isInteracting = true
-		isPressingKey = false
-		isFinishing = false
-		--EVENT_MANAGER:UnregisterForEvent(AHKVacuum.name, EVENT_CHATTER_END)
-		--EVENT_MANAGER:UnregisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED)
-		-- Find what we're actually interacting with
-		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
-		local delay = 0
-		if curAction=="Fish" or curAction=="Reel In" then
-			--wasMountedBeforeLooting = false -- tmpbri
-			--wasMovingBeforeLooting = false -- tmpbri
-			--zo_callLater(function() EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, AHKVacuum.OnFinishInteracting) end, delay) -- delay enabling for a bit
-			--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, AHKVacuum.OnFinishInteracting)
-			delay = 0
-		elseif curInteractableName=="Chest" then
-			--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting)
-			delay = 200
-		elseif curAction=="Take" then
-			--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CHATTER_END, AHKVacuum.OnFinishInteracting)
-			delay = 0
-		else
-			--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting)
-			delay = 0
-		end
-		--zo_callLater(function() EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting) end, delay)
-		--zo_callLater(function() EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CHATTER_END, AHKVacuum.OnFinishInteracting) end, delay)
-		--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting)
-		--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CHATTER_END, AHKVacuum.OnFinishInteracting)
-		dmsg("OnBeginInteracting -"..CurFocus())
 	end
 end
 
@@ -195,44 +160,7 @@ function AHKVacuum.HookFish(eventCode, bagId, slotId, isNewItem, itemSoundCatego
 	if (GetItemType(bagId,slotId) == ITEMTYPE_LURE and isNewItem == false and stackCountChange == -1 and itemSoundCategory == 39) then
 		dmsg("Lure used, pressing E")
 		ptk.SetIndOnFor(ptk.VK_E, 50)
-		--zo_callLater(AHKVacuum.OnFinishInteracting, 500)
 	end
-end
-
-local function initLots()
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_CLOSED, function(...) dmsg("EVENT_LOOT_CLOSED"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_ITEM_FAILED, function(...) dmsg("EVENT_LOOT_ITEM_FAILED"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_RECEIVED, function(...) dmsg("EVENT_LOOT_RECEIVED"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_UPDATED, function(...) dmsg("EVENT_LOOT_UPDATED"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CHATTER_BEGIN, function(...) dmsg("EVENT_CHATTER_BEGIN"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CHATTER_END, function(...) dmsg("EVENT_CHATTER_END"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CONFIRM_INTERACT, function(...) dmsg("EVENT_CONFIRM_INTERACT"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CONVERSATION_FAILED_INVENTORY_FULL, function(...) dmsg("EVENT_CONVERSATION_FAILED_INVENTORY_FULL"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CONVERSATION_FAILED_UNIQUE_ITEM, function(...) dmsg("EVENT_CONVERSATION_FAILED_UNIQUE_ITEM"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CONVERSATION_UPDATED, function(...) dmsg("EVENT_CONVERSATION_UPDATED"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_INTERACT_BUSY, function(...) dmsg("EVENT_INTERACT_BUSY"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_NO_INTERACT_TARGET, function(...) dmsg("EVENT_NO_INTERACT_TARGET"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_PENDING_INTERACTION_CANCELLED, function(...) dmsg("EVENT_PENDING_INTERACTION_CANCELLED"..CurFocus()) d({...}) end)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CLIENT_INTERACT_RESULT, function(...) dmsg("EVENT_CLIENT_INTERACT_RESULT"..CurFocus()) d({...}) end)
-	--SecurePostHook (ZO_Fishing, "StartInteraction", function(...) dmsg("StartInteraction"..CurFocus()) d({...}) end) -- shows info
-	--SecurePostHook (ZO_Fishing, "StopInteraction", function(...) dmsg("ZO_Fishing:StopInteraction"..CurFocus()) d({...}) end) -- shows info
-	SecurePostHook ("EndInteraction", function(...) dmsg("EndInteraction"..CurFocus()) d({...}) end)
-	ZO_PreHookHandler(RETICLE.interact, "OnHide", AHKVacuum.OnReticleSet)
-
---ActionResult==ACTION_RESULT_TARGET_OUT_OF_RANGE
---EVENT_COMBAT_EVENT (number eventCode, number ActionResult result, boolean isError, string abilityName, number abilityGraphic, number ActionSlotType abilityActionSlotType, string sourceName, number CombatUnitType sourceType, string targetName, number CombatUnitType targetType, number hitValue, number CombatMechanicType powerType, number DamageType damageType, boolean log, number sourceUnitId, number targetUnitId, number abilityId, number overflow)
---eventCode, result, isError, abilityName, abilityGraphic, abilityActionSlotType, sourceName, sourceType, targetName, targetType, hitValue, powerType, damageType, log, sourceUnitId, targetUnitId, abilityId, overflow
-EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_COMBAT_EVENT, 
-	function(eventCode, result, isError, abilityName, abilityGraphic, abilityActionSlotType, sourceName, sourceType, targetName, targetType, hitValue, powerType, damageType, log, sourceUnitId, targetUnitId, abilityId, overflow)
-		if result == ACTION_RESULT_TARGET_OUT_OF_RANGE then
-			dmsg("EVENT_COMBAT_EVENT"..CurFocus())
-			d({eventCode, result, isError, abilityName, abilityGraphic, abilityActionSlotType, sourceName, sourceType, targetName, targetType, hitValue, powerType, damageType, log, sourceUnitId, targetUnitId, abilityId, overflow}) 
-			AHKVacuum.OnFinishInteracting()
-		end
-	end)
---EVENT_MANAGER:AddFilterForEvent(AHKVacuum.name.."TXT", EVENT_COMBAT_EVENT, REGISTER_FILTER_COMBAT_RESULT, ACTION_RESULT_TARGET_OUT_OF_RANGE)
---EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_COMBAT_EVENT, function(...) dmsg("EVENT_COMBAT_EVENT"..CurFocus()) d({...}) end)
-
 end
 
 function AHKVacuum:Initialize()
@@ -248,42 +176,46 @@ function AHKVacuum:Initialize()
 
 	--SecurePostHook (ZO_Fishing, "StartInteraction", AHKVacuum.OnBeginInteracting) -- begin harvesting/fishing/searching/taking
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CLIENT_INTERACT_RESULT, AHKVacuum.OnBeginInteracting) -- I think this starts everything and can replace StartInteraction
+
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CHATTER_END, AHKVacuum.OnFinishInteracting) -- end of harvesting/fishing/not-searching(should work with onLootClosed)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting) -- seems to be needed for Search of bodies
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_COMBAT_EVENT, AHKVacuum.OnFinishInteracting) -- to handle "Target is out of range"
+	EVENT_MANAGER:AddFilterForEvent(AHKVacuum.name, EVENT_COMBAT_EVENT, REGISTER_FILTER_COMBAT_RESULT, ACTION_RESULT_TARGET_OUT_OF_RANGE)
+
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_NO_INTERACT_TARGET, AHKVacuum.ClearInteraction)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_ITEM_FAILED, AHKVacuum.ClearInteraction)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_PENDING_INTERACTION_CANCELLED, AHKVacuum.ClearInteraction)
 
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CHATTER_END, AHKVacuum.OnFinishInteracting) -- end of harvesting/fishing/not-searching(should work with onLootClosed)
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting) -- seems to be needed for Search of bodies
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_RECEIVED, AHKVacuum.OnFinishInteracting) -- pretty good for indicating fast looted
-	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_COMBAT_EVENT, AHKVacuum.OnFinishInteracting) -- to handle "Target is out of range"
-	EVENT_MANAGER:AddFilterForEvent(AHKVacuum.name, EVENT_COMBAT_EVENT, REGISTER_FILTER_COMBAT_RESULT, ACTION_RESULT_TARGET_OUT_OF_RANGE)
-
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, AHKVacuum.HookFish)
 
-	--SecurePostHook (ZO_Fishing, "StartInteraction", function() dmsg("StartInteraction"..CurFocus()) end)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CHATTER_END, function(...) dmsg("EVENT_CHATTER_END"..CurFocus()) d({...}) end)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_CLOSED, function(...) dmsg("EVENT_LOOT_CLOSED"..CurFocus()) d({...}) end)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_RECEIVED, function(...) dmsg("EVENT_LOOT_RECEIVED"..CurFocus()) d({...}) end)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, function(...) dmsg("EVENT_INVENTORY_SINGLE_SLOT_UPDATE"..CurFocus()) d({...}) end)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_NO_INTERACT_TARGET, function(...) dmsg("EVENT_NO_INTERACT_TARGET"..CurFocus()) d({...}) end)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_ITEM_FAILED, function(...) dmsg("EVENT_LOOT_ITEM_FAILED"..CurFocus()) d({...}) end)
+	--if InitLots then InitLots() end
+	--SLASH_COMMANDS["/keybindssave"] = KeybindsSave
+	--SLASH_COMMANDS["/keybindsreset"] = KeybindsReset
+end
 
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CHATTER_END, function() dmsg("EVENT_CHATTER_END"..CurFocus()) d() end)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_CLOSED, function() dmsg("EVENT_LOOT_CLOSED"..CurFocus()) d() end)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_RECEIVED, function() dmsg("EVENT_LOOT_RECEIVED"..CurFocus()) d() end)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, function() dmsg("EVENT_INVENTORY_SINGLE_SLOT_UPDATE"..CurFocus()) d() end)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_NO_INTERACT_TARGET, function() dmsg("EVENT_NO_INTERACT_TARGET"..CurFocus()) d() end)
-	--initLots()
+local function InitLots()
+	local function DispValues(args)
+		--d(args)
+	end
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_CLOSED, function(...) dmsg("EVENT_LOOT_CLOSED"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_ITEM_FAILED, function(...) dmsg("EVENT_LOOT_ITEM_FAILED"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_RECEIVED, function(...) dmsg("EVENT_LOOT_RECEIVED"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_LOOT_UPDATED, function(...) dmsg("EVENT_LOOT_UPDATED"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CHATTER_BEGIN, function(...) dmsg("EVENT_CHATTER_BEGIN"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CHATTER_END, function(...) dmsg("EVENT_CHATTER_END"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CONFIRM_INTERACT, function(...) dmsg("EVENT_CONFIRM_INTERACT"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CONVERSATION_FAILED_INVENTORY_FULL, function(...) dmsg("EVENT_CONVERSATION_FAILED_INVENTORY_FULL"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CONVERSATION_FAILED_UNIQUE_ITEM, function(...) dmsg("EVENT_CONVERSATION_FAILED_UNIQUE_ITEM"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CONVERSATION_UPDATED, function(...) dmsg("EVENT_CONVERSATION_UPDATED"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_INTERACT_BUSY, function(...) dmsg("EVENT_INTERACT_BUSY"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_NO_INTERACT_TARGET, function(...) dmsg("EVENT_NO_INTERACT_TARGET"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_PENDING_INTERACTION_CANCELLED, function(...) dmsg("EVENT_PENDING_INTERACTION_CANCELLED"..CurFocus()) DispValues({...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."TXT", EVENT_CLIENT_INTERACT_RESULT, function(...) dmsg("EVENT_CLIENT_INTERACT_RESULT"..CurFocus()) DispValues({...}) end)
+	--SecurePostHook (ZO_Fishing, "StartInteraction", function(...) dmsg("StartInteraction"..CurFocus()) DispValues({...}) end) -- shows lots of info
+	--SecurePostHook (ZO_Fishing, "StopInteraction", function(...) dmsg("ZO_Fishing:StopInteraction"..CurFocus()) DispValues({...}) end) -- shows lots of info
+	SecurePostHook ("EndInteraction", function(...) dmsg("EndInteraction"..CurFocus()) DispValues({...}) end) -- nothing?
 
---if IsCurFocusSetForInteract() then
---	AHKVacuum.ClearInteraction()
---	if IsPlayerTryingToMoveLoc() then wasMovingBeforeLooting = true end
---	if IsMountedLoc() then wasMountedBeforeLooting = true end
---	tapE()
---	dmsg("OnReticleSet -"..CurFocus())
---end
-
---Nothing
+--No target
 --XXXXX	StartInteraction -- Pressed E
 --3		EVENT_NO_INTERACT_TARGET
 
@@ -354,9 +286,25 @@ function AHKVacuum:Initialize()
 --Lootable body
 --XXXXX	StartInteraction (Search/Iron Orc Thundermaul) -- Pressed E
 --102	EVENT_LOOT_CLOSED (Search/Iron Orc Thundermaul) -- 32 Gold acquired
+end
 
-	SLASH_COMMANDS["/keybindssave"] = KeybindsSave
-	SLASH_COMMANDS["/keybindsreset"] = KeybindsReset
+
+function AHKVacuum:ShopDirectionRightOn()  ptk.SetIndOn (ptk.VK_D) end
+function AHKVacuum:ShopDirectionRightOff() ptk.SetIndOff(ptk.VK_D) end
+function AHKVacuum:ShopDirectionLeftOn()   ptk.SetIndOn (ptk.VK_A) end
+function AHKVacuum:ShopDirectionLeftOff()  ptk.SetIndOff(ptk.VK_A) end
+function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) end
+function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) end
+function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) end
+function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) end
+function AHKVacuum:ShopAutomoveToggle()
+	if not doRidePickupAll then
+		doRidePickupAll = true
+		d("Horse Vacuum ON")
+	else
+		doRidePickupAll = false
+		d("Horse Vacuum OFF")
+	end
 end
 
 -- Then we create an event handler function which will be called when the "addon loaded" event
