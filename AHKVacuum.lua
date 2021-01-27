@@ -99,19 +99,20 @@ function AHKVacuum.OnReticleSet()
 	end
 end
 function AHKVacuum.OnBeginInteracting()
-	EVENT_MANAGER:UnregisterForUpdate("CallLaterFunction"..handleFailSafe) --clear handleFailSafe
+	if handleFailSafe then EVENT_MANAGER:UnregisterForUpdate("CallLaterFunction"..handleFailSafe) end --clear handleFailSafe
 	if isPressingKey then -- if instigated by us
 		dmsg("OnBeginInteracting"..CurFocus())
-		if IsPlayerTryingToMoveLoc() then
-			zo_callLater(AHKVacuum.ClearInteraction, 100)
-		else
+		--if IsPlayerTryingToMoveLoc() then
+		--	zo_callLater(AHKVacuum.ClearInteraction, 100)
+		--else
 			isInteracting = true
 			isPressingKey = false
 			isFinishing = false
-		end
+		--end
 	end
 end
 function AHKVacuum.OnFinishInteracting()
+	if handleFailSafe then EVENT_MANAGER:UnregisterForUpdate("CallLaterFunction"..handleFailSafe) end --clear handleFailSafe
 	--dmsg("OnFinishInteracting"
 	--				.." "..BoolDecode(isPressingKey, "PressingKey", "NotPressingKey")
 	--				.."/"..BoolDecode(isInteracting, "Interacting", "NotInteracting")
@@ -126,17 +127,7 @@ function AHKVacuum.OnFinishInteracting()
 		-- If there's another thing to loot then do it, otherwise resume movement
 		if IsApprovedInteractable() then
 			d("Interact with next item:"..CurFocus())
-			local delay = 0
-			--if curAction=="Fish" or curAction=="Reel In" then
-			--	delay = 200
-			--elseif curInteractableName=="Chest" then
-			--	delay = 200
-			--elseif curAction=="Take" then
-			--	delay = 200
-			--else
-			--	delay = 200
-			--end
-			zo_callLater(tapE, delay)
+			tapE()
 		else
 			if not doRidePickupAll then wasMountedBeforeLooting = false end
 			local t = 0
