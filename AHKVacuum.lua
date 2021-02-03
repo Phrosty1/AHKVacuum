@@ -3,7 +3,7 @@ AHKVacuum = {}
 AHKVacuum.name = "AHKVacuum"
 AHKVacuum.savedVars = {}
 local ptk = LibPixelControl
-local verbose = true -- false
+local verbose = false -- false
 local GetGameTimeMillisecondsLoc = GetGameTimeMilliseconds
 local ms_time = GetGameTimeMillisecondsLoc()
 local function dmsg(txt)
@@ -22,9 +22,11 @@ local function newIndexedSet(...)
 	for _,value in pairs({...}) do retval[value] = true end
 	return retval
 end
-local actionsToTakeByDefault = newIndexedSet("Search","Take","Collect","Mine","Cut","Unlock","Dig","Dig Up","Fish") -- ,"Reel In"
+local actionsToTakeByDefault = newIndexedSet("Search","Take","Collect","Mine","Cut","Unlock","Dig","Dig Up","Fish")
 local blacklist = newIndexedSet("Bookshelf","Book Stack", "Spoiled Food","Greatsword","Sword","Axe","Bow","Shield","Staff","Sabatons","Jerkin","Dagger","Cuirass","Pauldron","Helm","Gauntlets","Guards","Boots","Shoes","Wasp","Fleshflies","Butterfly","Torchbug")
-local whitelist = newIndexedSet("Giant Clam", "Platinum Seam", "Heavy Sack", "Heavy Crate", "Chest", "Hidden Treasure", "Dirt Mound", "Skyshard", "Steam Pipe")
+local mountedWhitelist = newIndexedSet("Giant Clam", "Platinum Seam", "Heavy Sack", "Heavy Crate", "Chest", "Hidden Treasure", "Dirt Mound", "Skyshard", "Steam Pipe",
+	"Protean Runestone","Rich Platinum Seam","Rich Rubedite Ore","Pristine Ruby Ash Wood","Lush Ancestor Silk",
+	"Lush Blessed Thistle","Lush Bugloss","Lush Columbine","Lush Corn Flower","Lush Dragonthorn","Lush Lady's Smock","Lush Mountain Flower","Lush Wormwood")
 -- Local references for eso functions
 local IsPlayerTryingToMoveLoc = IsPlayerTryingToMove -- Returns: boolean tryingToMove
 local IsMountedLoc = IsMounted -- Returns: boolean mounted
@@ -37,17 +39,45 @@ local wasMountedBeforeLooting = false -- IsMountedLoc()
 local isPressingKey = false
 local isInteracting = false
 local isFinishing = false
-local doRidePickupAll = false
-local handleFailSafe = nil
+--local handleFailSafe = nil
+local doRidePickupAll = true
+local doAutoStartFishing = false
 
 local obj = {}
 local msHoldKeysUntil = 0
 
+local function dump(o)
+	if type(o) == 'table' then
+		local s = '{ '
+		for k,v in pairs(o) do
+			if type(k) ~= 'number' then k = '"'..k..'"' end
+			s = s .. '['..k..'] = ' .. dump(v) .. ','
+		end
+		return s .. '} '
+	else
+		return tostring(o)
+	end
+end
+local function LogValues(eventName, args)
+	local ms_log_time = GetGameTimeMillisecondsLoc()
+	local strArgs = ""
+	local sep = ";"
+	--for _,value in pairs(args) do strArgs = strArgs..","..tostring(value) end
+	curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
+	strArgs = tostring(ms_log_time)..sep..eventName..";"..tostring(curAction)..sep..tostring(curInteractableName) ..sep..BoolDecode(curInteractBlocked, "Blocked", "NotBlocked") ..sep..tostring(curAdditionalInfo) ..sep..tostring(curContextualInfo)
+		..sep..BoolDecode(CanInteractWithItem(), "CanInteract", "CanNotInteract")
+		..sep..BoolDecode(IsInteracting(), "IsInteracting", "IsNotInteracting")
+		..sep..BoolDecode(IsPlayerTryingToMoveLoc(), "TryingToMove", "NotTryingToMove")
+		..sep..dump(args)
+	AHKVacuum.savedVars.log[AHKVacuum.savedVars.logIdx] = strArgs
+	AHKVacuum.savedVars.logIdx = AHKVacuum.savedVars.logIdx + 1
+end
 local function tapE()
 	isPressingKey = true
 	isInteracting = false
 	isFinishing = false
 	dmsg("Tap E")
+	LogValues("tapE")
 	ptk.SetIndOnFor(ptk.VK_E, 50)
 
 	--handleFailSafe = zo_callLater(AHKVacuum.ClearInteraction, 200) -- refresh if no event occurs
@@ -84,10 +114,10 @@ local function IsApprovedInteractable()
 			or curAdditionalInfo == ADDITIONAL_INTERACT_INFO_LOCKED
 			or curAdditionalInfo == ADDITIONAL_INTERACT_INFO_FISHING_NODE)
 		and blacklist[curInteractableName] == nil
-		and (whitelist[curInteractableName] ~= nil
-			or (actionsToTakeByDefault[curAction] ~= nil
-				and (doRidePickupAll or not IsMountedLoc() )
-				and not IsUnitInCombatLoc("player") ) )
+		and (doRidePickupAll or mountedWhitelist[curInteractableName] ~= nil or not IsMountedLoc())
+		and actionsToTakeByDefault[curAction] ~= nil
+		and (doAutoStartFishing or curAdditionalInfo ~= ADDITIONAL_INTERACT_INFO_FISHING_NODE)
+		and not IsUnitInCombatLoc("player")
 	then return true else return false end
 end
 function AHKVacuum.OnReticleSet()
@@ -104,9 +134,10 @@ end
 function AHKVacuum.OnBeginInteracting()
 --	obj.action, obj.name, obj.interactBlocked, obj.isOwned, obj.additionalInfo, obj.contextualInfo, obj.contextualLink, obj.isCriminalInteract = GetGameCameraInteractableActionInfoLoc()
 
-	if handleFailSafe then EVENT_MANAGER:UnregisterForUpdate("CallLaterFunction"..handleFailSafe) end --clear handleFailSafe
-	if isPressingKey then -- if instigated by us
+	--if handleFailSafe then EVENT_MANAGER:UnregisterForUpdate("CallLaterFunction"..handleFailSafe) end --clear handleFailSafe
+	--if isPressingKey then -- if instigated by us
 		dmsg("OnBeginInteracting"..CurFocus())
+		LogValues("AHKVacuum:OnBeginInteracting")
 		--if IsPlayerTryingToMoveLoc() then
 		--	zo_callLater(AHKVacuum.ClearInteraction, 100)
 		--else
@@ -114,41 +145,53 @@ function AHKVacuum.OnBeginInteracting()
 			isPressingKey = false
 			isFinishing = false
 		--end
-	end
+	--end
 end
 function AHKVacuum.OnFinishInteracting()
-	if handleFailSafe then EVENT_MANAGER:UnregisterForUpdate("CallLaterFunction"..handleFailSafe) end --clear handleFailSafe
+	--if handleFailSafe then EVENT_MANAGER:UnregisterForUpdate("CallLaterFunction"..handleFailSafe) end --clear handleFailSafe
 	--dmsg("OnFinishInteracting"
 	--				.." "..BoolDecode(isPressingKey, "PressingKey", "NotPressingKey")
 	--				.."/"..BoolDecode(isInteracting, "Interacting", "NotInteracting")
 	--				.."/"..BoolDecode(isFinishing, "Finishing", "NotFinishing"))
-	--clear handleFailSafe
-	if isInteracting then
+	if not isPressingKey and isInteracting and not isFinishing then
 		dmsg("OnFinishInteracting"..CurFocus())
+		LogValues("AHKVacuum:OnFinishInteracting")
 		isFinishing = true
 		isInteracting = false
 		-- Since we finished, do a manual check to determine whether to interact again or resume actions
 		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
 		-- If there's another thing to loot then do it, otherwise resume movement
 		if IsApprovedInteractable() then
-			d("Interact with next item:"..CurFocus())
+			dmsg("Interact with next item:"..CurFocus())
 			tapE()
+		elseif IsUnitInCombatLoc("player") then
+			AHKVacuum.ClearInteraction()
 		else
-			if not doRidePickupAll then wasMountedBeforeLooting = false end
-			local t = 0
-			if wasMountedBeforeLooting and wasMovingBeforeLooting then
-				d("wasMountedBeforeLooting and wasMovingBeforeLooting")
-				if not IsMountedLoc() then zo_callLater(tapH, t) t=t+200 end
-				zo_callLater(tapT, t) t=t+200
+			--if not doRidePickupAll then wasMountedBeforeLooting = false end
+			if wasMountedBeforeLooting and not IsMountedLoc() then
+				--d("wasMountedBeforeLooting")
+				tapH()
 			elseif wasMovingBeforeLooting then
-				d("wasMovingBeforeLooting")
-				zo_callLater(tapT, t) t=t+200
-			elseif wasMountedBeforeLooting then
-				d("wasMountedBeforeLooting")
-				zo_callLater(tapT, t) t=t+200
+				--d("wasMovingBeforeLooting")
+				tapT()
+				zo_callLater(AHKVacuum.ClearInteraction, 50)
+			else
+				AHKVacuum.ClearInteraction()
 			end
-			zo_callLater(AHKVacuum.ClearInteraction, t) -- We hold isInteracting as true until we're done hitting keys then we're back to searching
 		end
+	end
+end
+
+function AHKVacuum.OnMountedStateChange(eventCode, mounted)
+	dmsg("OnMountedStateChange"
+		.." "..BoolDecode(isPressingKey, "PressingKey", "NotPressingKey")
+		.."/"..BoolDecode(isInteracting, "Interacting", "NotInteracting")
+		.."/"..BoolDecode(isFinishing, "Finishing", "NotFinishing"))
+
+	if mounted and wasMovingBeforeLooting and isFinishing then
+		--d("wasMovingBeforeLooting")
+		tapT()
+		zo_callLater(AHKVacuum.ClearInteraction, 50)
 	end
 end
 
@@ -159,34 +202,8 @@ function AHKVacuum.HookFish(eventCode, bagId, slotId, isNewItem, itemSoundCatego
 	end
 end
 
-local function dump(o)
-	if type(o) == 'table' then
-		local s = '{ '
-		for k,v in pairs(o) do
-			if type(k) ~= 'number' then k = '"'..k..'"' end
-			s = s .. '['..k..'] = ' .. dump(v) .. ','
-		end
-		return s .. '} '
-	else
-		return tostring(o)
-	end
-end
 
 local function InitLots()
-	local function LogValues(eventName, args)
-		local ms_log_time = GetGameTimeMillisecondsLoc()
-		local strArgs = ""
-		local sep = ";"
-		--for _,value in pairs(args) do strArgs = strArgs..","..tostring(value) end
-		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
-		strArgs = tostring(ms_log_time)..sep..eventName..";"..tostring(curAction)..sep..tostring(curInteractableName) ..sep..BoolDecode(curInteractBlocked, "Blocked", "NotBlocked") ..sep..tostring(curAdditionalInfo) ..sep..tostring(curContextualInfo)
-			..sep..BoolDecode(CanInteractWithItem(), "CanInteract", "CanNotInteract")
-			..sep..BoolDecode(IsInteracting(), "IsInteracting", "IsNotInteracting")
-			..sep..BoolDecode(IsPlayerTryingToMoveLoc(), "TryingToMove", "NotTryingToMove")
-			..sep..dump(args)
-		AHKVacuum.savedVars.log[AHKVacuum.savedVars.logIdx] = strArgs
-		AHKVacuum.savedVars.logIdx = AHKVacuum.savedVars.logIdx + 1
-	end
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_LOOT_CLOSED, function(...) LogValues("EVENT_LOOT_CLOSED", {...}) end)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_LOOT_ITEM_FAILED, function(...) LogValues("EVENT_LOOT_ITEM_FAILED", {...}) end)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_LOOT_RECEIVED, function(...) LogValues("EVENT_LOOT_RECEIVED", {...}) end)
@@ -203,9 +220,33 @@ local function InitLots()
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_CLIENT_INTERACT_RESULT, function(...) LogValues("EVENT_CLIENT_INTERACT_RESULT", {...}) end)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_COMBAT_EVENT, function(...) LogValues("EVENT_COMBAT_EVENT", {...}) end)
 	EVENT_MANAGER:AddFilterForEvent(AHKVacuum.name.."LOG", EVENT_COMBAT_EVENT, REGISTER_FILTER_COMBAT_RESULT, ACTION_RESULT_TARGET_OUT_OF_RANGE)
-	SecurePostHook (ZO_Fishing, "StartInteraction", function(...) LogValues("ZO_Fishing:StartInteraction", {...}) end)
-	SecurePostHook (ZO_Fishing, "StopInteraction", function(...) LogValues("ZO_Fishing:StopInteraction", {...}) end)
-	--SecurePostHook ("EndInteraction", function(...) dmsg("EndInteraction"..CurFocus()) DispValues({...}) end) -- nothing?
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_MOUNTED_STATE_CHANGED, function(...) LogValues("EVENT_MOUNTED_STATE_CHANGED", {...}) end)
+	SecurePostHook (ZO_Fishing, "StartInteraction", function(...) LogValues("ZO_Fishing:StartInteraction", {}) end)
+	SecurePostHook (ZO_Fishing, "StopInteraction", function(...) LogValues("ZO_Fishing:StopInteraction", {}) end)
+	SecurePostHook (ZO_Fishing, "EndInteraction", function(...) LogValues("ZO_Fishing:EndInteraction", {...}) end) -- nothing?
+
+--SecurePostHook ("AcceptSharedQuest", function(...) LogValues("AcceptSharedQuest", {...}) end)
+--SecurePostHook ("ToggleWalk", function(...) LogValues("ToggleWalk", {...}) end) -- can't call private function
+
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_GAME_CAMERA_ACTIVATED, function(...) LogValues("EVENT_GAME_CAMERA_ACTIVATED", {...}) end)
+	SecurePostHook ("ClearCursor", function(...) LogValues("ClearCursor", {...}) end)
+
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_NEW_MOVEMENT_IN_UI_MODE, function(...) LogValues("EVENT_NEW_MOVEMENT_IN_UI_MODE", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_RETICLE_TARGET_CHANGED, function(...) LogValues("EVENT_RETICLE_TARGET_CHANGED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_RETICLE_TARGET_PLAYER_CHANGED, function(...) LogValues("EVENT_RETICLE_TARGET_PLAYER_CHANGED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_VISUAL_LAYER_CHANGED, function(...) LogValues("EVENT_VISUAL_LAYER_CHANGED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_UNIT_CREATED, function(...) LogValues("EVENT_UNIT_CREATED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_WORLD_EVENTS_INITIALIZED, function(...) LogValues("EVENT_WORLD_EVENTS_INITIALIZED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_WORLD_EVENT_ACTIVATED, function(...) LogValues("EVENT_WORLD_EVENT_ACTIVATED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_WORLD_EVENT_ACTIVE_LOCATION_CHANGED, function(...) LogValues("EVENT_WORLD_EVENT_ACTIVE_LOCATION_CHANGED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_WORLD_EVENT_DEACTIVATED, function(...) LogValues("EVENT_WORLD_EVENT_DEACTIVATED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_WORLD_EVENT_UNIT_CHANGED_PIN_TYPE, function(...) LogValues("EVENT_WORLD_EVENT_UNIT_CHANGED_PIN_TYPE", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_WORLD_EVENT_UNIT_CREATED, function(...) LogValues("EVENT_WORLD_EVENT_UNIT_CREATED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_WORLD_EVENT_UNIT_DESTROYED, function(...) LogValues("EVENT_WORLD_EVENT_UNIT_DESTROYED", {...}) end)
+
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_GAME_CAMERA_UI_MODE_CHANGED, function(...) LogValues("EVENT_GAME_CAMERA_UI_MODE_CHANGED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_PLAYER_STATUS_CHANGED, function(...) LogValues("EVENT_PLAYER_STATUS_CHANGED", {...}) end)
+
 
 --No target
 --XXXXX	StartInteraction -- Pressed E
@@ -288,7 +329,7 @@ function AHKVacuum:Initialize()
 	ZO_CreateStringId("SI_BINDING_NAME_VACUUM_DOWN", "Vacuum Shop Down")
 	AHKVacuum.savedVars = ZO_SavedVars:NewAccountWide(AHKVacuum.name.."SavedVariables", 1, nil, {})
 
-	if AHKVacuum.savedVars.log == nil or AHKVacuum.savedVars.logIdx == nil or true then
+	if AHKVacuum.savedVars.log == nil or AHKVacuum.savedVars.logIdx == nil or false then
 		AHKVacuum.savedVars.log = {}
 		AHKVacuum.savedVars.logIdx = 0
 	end
@@ -311,6 +352,8 @@ function AHKVacuum:Initialize()
 
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INVENTORY_SINGLE_SLOT_UPDATE, AHKVacuum.HookFish)
 
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_MOUNTED_STATE_CHANGED, AHKVacuum.OnMountedStateChange)
+
 	InitLots()
 	--SLASH_COMMANDS["/keybindssave"] = KeybindsSave
 	--SLASH_COMMANDS["/keybindsreset"] = KeybindsReset
@@ -322,8 +365,17 @@ function AHKVacuum:ShopDirectionLeftOn()   ptk.SetIndOn (ptk.VK_A) end
 function AHKVacuum:ShopDirectionLeftOff()  ptk.SetIndOff(ptk.VK_A) end
 function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) end
 function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) end
-function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) end
-function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) end
+--function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) end
+--function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) end
+function AHKVacuum:ShopDirectionDownOn()   end
+function AHKVacuum:ShopDirectionDownOff()  
+	dmsg(""
+					.." "..BoolDecode(isPressingKey, "PressingKey", "NotPressingKey")
+					.."/"..BoolDecode(isInteracting, "Interacting", "NotInteracting")
+					.."/"..BoolDecode(isFinishing, "Finishing", "NotFinishing"))
+end
+
+
 function AHKVacuum:ShopAutomoveToggle()
 	if not doRidePickupAll then
 		doRidePickupAll = true
@@ -331,6 +383,15 @@ function AHKVacuum:ShopAutomoveToggle()
 	else
 		doRidePickupAll = false
 		d("Horse Vacuum OFF")
+	end
+end
+function AHKVacuum:ToggleAutoStartFishing()
+	if not doAutoStartFishing then
+		doAutoStartFishing = true
+		d("Vacuum Start Fishing ON")
+	else
+		doAutoStartFishing = false
+		d("Vacuum Start Fishing OFF")
 	end
 end
 
