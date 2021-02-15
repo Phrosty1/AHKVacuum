@@ -129,8 +129,8 @@ function AHKVacuum.ClearInteraction()
 	isPressingKey = false
 	isInteracting = false
 	isFinishing = false
-	--wasMovingBeforeLooting = false
-	--wasMountedBeforeLooting = false
+	wasMovingBeforeLooting = false
+	wasMountedBeforeLooting = false
 end
 local function IsApprovedInteractable()
 	if curAction ~= nil and curInteractableName ~= nil
@@ -159,16 +159,8 @@ function AHKVacuum.OnReticleSet()
 		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
 		if IsApprovedInteractable() then
 			dmsg("OnReticleSet"..CurFocus())
-			if IsPlayerTryingToMoveLoc() then 
-				wasMovingBeforeLooting = true 
-				if IsMountedLoc() then wasMountedBeforeLooting = true end
-			else
-				wasMovingBeforeLooting = false
-			end
-			if curAction=="Take" then
-				wasMovingBeforeLooting = false
-				wasMountedBeforeLooting = false
-			end
+			if IsPlayerTryingToMoveLoc() then wasMovingBeforeLooting = true end
+			if IsMountedLoc() then wasMountedBeforeLooting = true end
 			tapE()
 		end
 	end
@@ -206,24 +198,19 @@ function AHKVacuum.OnFinishInteracting()
 			tapE()
 		elseif IsUnitInCombatLoc("player") then
 			AHKVacuum.ClearInteraction()
-			wasMovingBeforeLooting = false
-			wasMountedBeforeLooting = false
 		elseif clientInteractingAction == "Fish" then
 			AHKVacuum.ClearInteraction()
-			wasMovingBeforeLooting = false
-			wasMountedBeforeLooting = false
 			tapH() -- Mount when done fishing
 		else
 			--if not doRidePickupAll then wasMountedBeforeLooting = false end
 			if wasMountedBeforeLooting and not IsMountedLoc() then
-				d("wasMountedBeforeLooting")
+				--d("wasMountedBeforeLooting")
 				tapH()
 			elseif wasMovingBeforeLooting then
-				d("wasMovingBeforeLooting")
+				--d("wasMovingBeforeLooting")
 				tapT()
-				--zo_callLater(AHKVacuum.ClearInteraction, 50)
+				zo_callLater(AHKVacuum.ClearInteraction, 50)
 			else
-				d("NOT wasMountedBeforeLooting, NOT wasMovingBeforeLooting")
 				AHKVacuum.ClearInteraction()
 			end
 		end
@@ -272,6 +259,10 @@ local function InitLogs()
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_MOUNTED_STATE_CHANGED, function(...) LogValues("EVENT_MOUNTED_STATE_CHANGED", {...}) end)
 	SecurePostHook (ZO_Fishing, "StartInteraction", function(...) LogValues("ZO_Fishing:StartInteraction", {}) end)
 	SecurePostHook (ZO_Fishing, "StopInteraction", function(...) LogValues("ZO_Fishing:StopInteraction", {}) end)
+	SecurePostHook (ZO_Fishing, "EndInteraction", function(...) LogValues("ZO_Fishing:EndInteraction", {...}) end) -- nothing?
+
+--SecurePostHook ("AcceptSharedQuest", function(...) LogValues("AcceptSharedQuest", {...}) end)
+--SecurePostHook ("ToggleWalk", function(...) LogValues("ToggleWalk", {...}) end) -- can't call private function
 
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_GAME_CAMERA_ACTIVATED, function(...) LogValues("EVENT_GAME_CAMERA_ACTIVATED", {...}) end)
 	SecurePostHook ("ClearCursor", function(...) LogValues("ClearCursor", {...}) end)
@@ -288,9 +279,84 @@ local function InitLogs()
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_WORLD_EVENT_UNIT_CHANGED_PIN_TYPE, function(...) LogValues("EVENT_WORLD_EVENT_UNIT_CHANGED_PIN_TYPE", {...}) end)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_WORLD_EVENT_UNIT_CREATED, function(...) LogValues("EVENT_WORLD_EVENT_UNIT_CREATED", {...}) end)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_WORLD_EVENT_UNIT_DESTROYED, function(...) LogValues("EVENT_WORLD_EVENT_UNIT_DESTROYED", {...}) end)
+
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_GAME_CAMERA_UI_MODE_CHANGED, function(...) LogValues("EVENT_GAME_CAMERA_UI_MODE_CHANGED", {...}) end)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_PLAYER_STATUS_CHANGED, function(...) LogValues("EVENT_PLAYER_STATUS_CHANGED", {...}) end)
+
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_INTERACTION_ENDED, function(...) LogValues("EVENT_INTERACTION_ENDED", {...}) end)
+
+
+--No target
+--XXXXX	StartInteraction -- Pressed E
+--3		EVENT_NO_INTERACT_TARGET
+
+--Fishing and catch
+--XXXXX	StartInteraction (Fish/Lake Fishing Hole) -- Pressed E
+--21000	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (Reel In/Lake Fishing Hole)	-- Bait taken
+--1500	StartInteraction (Reel In/Lake Fishing Hole) -- Pressed E
+--100	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (Fish/Lake Fishing Hole) -- Fish deposited?
+--0		EVENT_LOOT_RECEIVED (Fish/Lake Fishing Hole)
+--0		EVENT_LOOT_CLOSED (Fish/Lake Fishing Hole)
+--0		EVENT_CHATTER_END (Fish/Lake Fishing Hole)
+
+--Collect Water
+--XXXXX	StartInteraction (Collect/Pure Water) -- Pressed E
+--2000	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Ore deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_LOOT_CLOSED (nil/nil)
+--0		EVENT_CHATTER_END (nil/nil)
+
+--Mine Platinum
+--XXXXX	StartInteraction (Mine/Platinum Seam) -- Pressed E
+--1800	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Ore deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Ochre deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Potent Nirncrux deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_LOOT_CLOSED (nil/nil)
+--0		EVENT_CHATTER_END (nil/nil)
+
+--Backpack
+--XXXXX	StartInteraction (Search/Backpack) -- Pressed E
+--122	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (Search/Backpack) -- Ore deposited
+--0		EVENT_LOOT_RECEIVED (Search/Backpack)
+--0		EVENT_LOOT_CLOSED (Search/Backpack)
+--0		EVENT_CHATTER_END (Search/Backpack)
+
+--Poultry
+--XXXXX	StartInteraction (Take/Poultry) -- Pressed E
+--150	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Poultry deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_CHATTER_END (nil/nil)
+
+--Heavy Sack
+--XXXXX	StartInteraction (Search/Heavy Sack) -- Pressed E
+--1524	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- 10 Ore deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_LOOT_CLOSED (nil/nil)
+--0		EVENT_CHATTER_END (nil/nil)
+
+--Unlock Chest
+--XXXXX	StartInteraction (Unlock/Chest) -- Pressed E
+--		BeginLockpicking
+--		EndLockpicking
+--6000	EVENT_CHATTER_END (Unlock/Chest)
+--2181	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Misc/Junk deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Misc/Junk deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Misc/Junk deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Misc/Junk deposited
+--0		EVENT_LOOT_RECEIVED (nil/nil)
+--0		EVENT_LOOT_CLOSED (nil/nil)
+--0		EVENT_CHATTER_END (nil/nil)
+--148	EVENT_INVENTORY_SINGLE_SLOT_UPDATE (nil/nil) -- Misc/Junk deposited
+
+--Lootable body
+--XXXXX	StartInteraction (Search/Iron Orc Thundermaul) -- Pressed E
+--102	EVENT_LOOT_CLOSED (Search/Iron Orc Thundermaul) -- 32 Gold acquired
 end
 
 function AHKVacuum:Initialize()
@@ -324,7 +390,7 @@ function AHKVacuum:Initialize()
 				clientInteractingAction = curAction
 				clientInteractingTime = GetGameTimeMillisecondsLoc()
 				AHKVacuum.savedVars.interactResultSuccess[clientInteractingWith] = clientInteractingTime
-				--AHKVacuum.OnBeginInteracting() -- if this doesn't work, put back StartInteraction
+				AHKVacuum.OnBeginInteracting() -- if this doesn't work, put back StartInteraction
 			end
 			dmsg("EVENT_CLIENT_INTERACT_RESULT: "..tostring(ClientInteractResult[result]).." "..tostring(interactTargetName))
 		end)
@@ -366,11 +432,11 @@ function AHKVacuum:Initialize()
 			end
 		end)
 
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CHATTER_END, AHKVacuum.OnFinishInteracting) -- end of harvesting/fishing/not-searching(should work with onLootClosed)
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting) -- seems to be needed for Search of bodies
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CHATTER_END, AHKVacuum.OnFinishInteracting) -- end of harvesting/fishing/not-searching(should work with onLootClosed)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_CLOSED, AHKVacuum.OnFinishInteracting) -- seems to be needed for Search of bodies
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INTERACTION_ENDED, AHKVacuum.OnFinishInteracting) -- trying above
-	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_COMBAT_EVENT, AHKVacuum.OnFinishInteracting) -- to handle "Target is out of range"
-	--EVENT_MANAGER:AddFilterForEvent(AHKVacuum.name, EVENT_COMBAT_EVENT, REGISTER_FILTER_COMBAT_RESULT, ACTION_RESULT_TARGET_OUT_OF_RANGE)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_COMBAT_EVENT, AHKVacuum.OnFinishInteracting) -- to handle "Target is out of range"
+	EVENT_MANAGER:AddFilterForEvent(AHKVacuum.name, EVENT_COMBAT_EVENT, REGISTER_FILTER_COMBAT_RESULT, ACTION_RESULT_TARGET_OUT_OF_RANGE)
 
 	--EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_NO_INTERACT_TARGET, AHKVacuum.ClearInteraction)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_LOOT_ITEM_FAILED, AHKVacuum.ClearInteraction)
