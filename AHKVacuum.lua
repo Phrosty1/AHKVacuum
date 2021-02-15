@@ -98,22 +98,25 @@ local function LogValues(eventName, args)
 	AHKVacuum.savedVars.logIdx = AHKVacuum.savedVars.logIdx + 1
 end
 local function tapE()
-	isPressingKey = true
-	isInteracting = false
-	isFinishing = false
-	dmsg("Tap E")
-	LogValues("tapE")
-	ptk.SetIndOnFor(ptk.VK_E, 20)
-	lastActivationMs = GetGameTimeMillisecondsLoc()
-
-	--handleFailSafe = zo_callLater(AHKVacuum.ClearInteraction, 200) -- refresh if no event occurs
-	--dmsg("handleFailSafe:"..tostring(handleFailSafe))
+	if not IsGameCameraUIModeActive() then
+		isPressingKey = true
+		isInteracting = false
+		isFinishing = false
+		dmsg("Tap E")
+		LogValues("tapE")
+		ptk.SetIndOnFor(ptk.VK_E, 20)
+		lastActivationMs = GetGameTimeMillisecondsLoc()
+	end
 end
 local function tapT()
-	ptk.SetIndOnFor(ptk.VK_T, 20)
+	if not IsGameCameraUIModeActive() then
+		ptk.SetIndOnFor(ptk.VK_T, 20)
+	end
 end
 local function tapH()
-	ptk.SetIndOnFor(ptk.VK_H, 20)
+	if not IsGameCameraUIModeActive() then
+		ptk.SetIndOnFor(ptk.VK_H, 20)
+	end
 end
 local function CurFocus()
 	curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
@@ -274,6 +277,7 @@ local function InitLogs()
 	SecurePostHook (ZO_Fishing, "StopInteraction", function(...) LogValues("ZO_Fishing:StopInteraction", {}) end)
 
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_GAME_CAMERA_ACTIVATED, function(...) LogValues("EVENT_GAME_CAMERA_ACTIVATED", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_GAME_CAMERA_DEACTIVATED, function(...) LogValues("EVENT_GAME_CAMERA_DEACTIVATED", {...}) end)
 	SecurePostHook ("ClearCursor", function(...) LogValues("ClearCursor", {...}) end)
 
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_NEW_MOVEMENT_IN_UI_MODE, function(...) LogValues("EVENT_NEW_MOVEMENT_IN_UI_MODE", {...}) end)
