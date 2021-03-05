@@ -28,10 +28,14 @@ local insectsToTake = newIndexedSet("Wasp","Fleshflies","Butterfly","Torchbug","
 local mountedWhitelist = newIndexedSet("Giant Clam", "Platinum Seam", "Heavy Sack", "Heavy Crate", "Chest", "Hidden Treasure", "Dirt Mound", "Skyshard", "Steam Pipe", "Wasp Nest",
 	"Protean Runestone","Rich Platinum Seam","Rich Rubedite Ore","Pristine Ruby Ash Wood","Lush Ancestor Silk",
 	"Lush Blessed Thistle","Lush Bugloss","Lush Columbine","Lush Corn Flower","Lush Dragonthorn","Lush Lady's Smock","Lush Mountain Flower","Lush Wormwood")
+--[818] = "5763596;EVENT_RETICLE_TARGET_CHANGED;Take;Netch Calf;NotBlocked;0;nil;CanInteract;IsNotInteracting;NotMounted;NotTryingToMove;NotLooting;InteractionCameraNotActive;INTERACTION_NONE;;INTERACT_TARGET_TYPE_NONE;;false;{ [1] = 131119,} ",
+--[827] = "5766800;AHKVacuum:OnReticleSetChanged;Excavate;Dig Site;NotBlocked;0;nil;CanInteract;IsNotInteracting;NotMounted;TryingToMove;NotLooting;InteractionCameraNotActive;INTERACTION_NONE;;INTERACT_TARGET_TYPE_NONE;;false;nil",
+
 -- Local references for eso functions
 local IsPlayerTryingToMoveLoc = IsPlayerTryingToMove -- Returns: boolean tryingToMove
 local IsMountedLoc = IsMounted -- Returns: boolean mounted
 local GetGameCameraInteractableActionInfoLoc = GetGameCameraInteractableActionInfo -- Returns: string:nilable action, string:nilable name, boolean interactBlocked, boolean isOwned, number additionalInfo, number:nilable contextualInfo, string:nilable contextualLink, boolean isCriminalInteract
+local IsInteractingLoc = IsInteracting -- Returns: boolean interacting
 local IsUnitInCombatLoc = IsUnitInCombat -- (string unitTag) Returns: boolean isInCombat
 local IsGameCameraUIModeActiveLoc = IsGameCameraUIModeActive -- ** _Returns:_ *bool* _active_
 -- Local variables
@@ -45,10 +49,10 @@ local isInteracting = false
 local isFinishing = false
 --local handleFailSafe = nil
 local doRidePickupAll = false
-local doAutoStartFishing = true
-local msLastPressE = 0
-local msLastInteractionBegin = 0
-local msLastInteractionEnd = 0
+local doAutoStartFishing = false
+local msLastPressE = 0 -- msLastPressE = GetGameTimeMillisecondsLoc()
+local msLastInteractionBegin = 0 -- msLastInteractionBegin = GetGameTimeMillisecondsLoc()
+local msLastInteractionEnd = 0 -- msLastInteractionEnd = GetGameTimeMillisecondsLoc()
 
 local clientInteractingWith = nil -- EVENT_CLIENT_INTERACT_RESULT
 local clientInteractingAction = nil
@@ -89,7 +93,7 @@ local function LogValues(eventName, args)
 		strArgs = tostring(ms_log_time)..sep..eventName
 			..sep..tostring(curAction)..sep..tostring(curInteractableName) ..sep..BoolDecode(curInteractBlocked, "Blocked", "NotBlocked") ..sep..tostring(curAdditionalInfo) ..sep..tostring(curContextualInfo)
 			..sep..BoolDecode(CanInteractWithItem(), "CanInteract", "CanNotInteract")
-			..sep..BoolDecode(IsInteracting(), "IsInteracting", "IsNotInteracting")
+			..sep..BoolDecode(IsInteractingLoc(), "IsInteracting", "IsNotInteracting")
 			..sep..BoolDecode(IsMountedLoc(), "Mounted", "NotMounted")
 			..sep..BoolDecode(IsPlayerTryingToMoveLoc(), "TryingToMove", "NotTryingToMove")
 			--* IsLooting() --** _Returns:_ *bool* _isLooting_
@@ -125,7 +129,8 @@ function GetNextFish()
 end
 function UseNextFish()
 	local nextFish = GetNextFish()
-	dmsg("Using fish in slot:"..tostring(nextFish))
+	--dmsg("Using fish in slot:"..tostring(nextFish))
+	LogValues("UseNextFish:"..tostring(nextFish))
 	if nextFish then
 		useItem(BAG_BACKPACK, nextFish)
 	end
@@ -133,7 +138,7 @@ end
 local function tapE()
 	if not IsGameCameraUIModeActiveLoc() then
 		isPressingKey = true
-		dmsg("Tap E")
+		dmsg("Tap E - "..tostring(curInteractableName))
 		LogValues("tapE")
 		ptk.SetIndOnFor(ptk.VK_E, 20)
 		zo_callLater(function() isPressingKey = false end, 100)
@@ -157,7 +162,7 @@ local function CurFocus()
 	local retval = " - "..tostring(curAction).."/"..tostring(curInteractableName)
 					.."/"..BoolDecode(curInteractBlocked, "Blocked", "NotBlocked")
 					.."/"..BoolDecode(CanInteractWithItem(), "CanInteract", "CanNotInteract")
-					.."/"..BoolDecode(IsInteracting(), "IsInteracting", "IsNotInteracting")
+					.."/"..BoolDecode(IsInteractingLoc(), "IsInteracting", "IsNotInteracting")
 					.."/"..BoolDecode(IsPlayerTryingToMoveLoc(), "TryingToMove", "NotTryingToMove")
 	return retval
 end
@@ -166,6 +171,7 @@ function AHKVacuum.ClearInteraction()
 	isPressingKey = false
 	isInteracting = false
 	isFinishing = false
+	clientInteractingWith = nil
 	--wasMovingBeforeLooting = false
 	--wasMountedBeforeLooting = false
 end
@@ -187,13 +193,16 @@ end
 function AHKVacuum.OnReticleSet()
 	curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
 	if curAction~=prvAction or curInteractableName~=prvInteractableName or curInteractBlocked~=prvInteractBlocked or curIsOwned~=prvIsOwned or curAdditionalInfo~=prvAdditionalInfo or curContextualInfo~=prvContextualInfo or curContextualLink~=prvContextualLink or curIsCriminalInteract~=prvIsCriminalInteract then 
-		if curInteractableName~=nil and curInteractableName~=startedInteractableName and not curInteractBlocked then
-			AHKVacuum.ClearInteraction()
-		end
+		--if curInteractableName~=nil and curInteractableName~=startedInteractableName and not curInteractBlocked then
+		--	AHKVacuum.ClearInteraction()
+		--end
 		prvAction, prvInteractableName, prvInteractBlocked, prvIsOwned, prvAdditionalInfo, prvContextualInfo, prvContextualLink, prvIsCriminalInteract = curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract
 		LogValues("AHKVacuum:OnReticleSetChanged")
 	end
-	if not isPressingKey and not isInteracting and not isFinishing and msLastPressE < GetGameTimeMillisecondsLoc()+50 then
+	local curTime = GetGameTimeMillisecondsLoc()
+	--if not isPressingKey and not isInteracting and not isFinishing and msLastPressE < curTime+100 then
+	--if curTime > msLastPressE+100 and curTime > msLastInteractionBegin+1500 and not isInteracting and not isFinishing then
+	if curTime > msLastPressE+200 and clientInteractingWith==nil and not isFinishing and not IsInteractingLoc() then
 		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
 		if IsApprovedInteractable() then
 			--dmsg("OnReticleSet"..CurFocus())
@@ -220,6 +229,7 @@ function AHKVacuum.OnBeginInteracting()
 		--	zo_callLater(AHKVacuum.ClearInteraction, 100)
 		--else
 			isInteracting = true
+			msLastInteractionBegin = GetGameTimeMillisecondsLoc()
 			isPressingKey = false
 			isFinishing = false
 		--end
@@ -233,6 +243,7 @@ function AHKVacuum.OnFinishInteracting()
 		AHKVacuum.savedVars.interactEnded[clientInteractingEndWith] = clientInteractingEndTime-clientInteractingTime
 	end
 	clientInteractingWith = nil
+	msLastInteractionEnd = GetGameTimeMillisecondsLoc()
 	if isInteracting then
 		isInteracting = false
 		isFinishing = true
@@ -241,73 +252,74 @@ function AHKVacuum.OnFinishInteracting()
 		-- Since we finished, do a manual check to determine whether to interact again or resume actions
 		curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract = GetGameCameraInteractableActionInfoLoc()
 		-- Depending on why the interaction stopped, if there's another thing to loot then do it, otherwise resume movement
-		if IsApprovedInteractable() then
-			dmsg("Interact with next item:"..CurFocus())
+		if IsUnitInCombatLoc("player") then
+			dmsg("Finished and in combat."..CurFocus())
 			isFinishing = false
+			wasMovingBeforeLooting = false
+			wasMountedBeforeLooting = false
+		elseif IsGameCameraUIModeActiveLoc() then
+			dmsg("Finished and in menu."..CurFocus())
+			isFinishing = false
+			wasMovingBeforeLooting = false
+			wasMountedBeforeLooting = false
+		elseif IsApprovedInteractable() then
 			tapE()
+			isFinishing = false
+			dmsg("Interact with next item:"..CurFocus())
+		elseif clientInteractingAction == "Fish" then
+			UseNextFish()
+			isFinishing = false
+			wasMovingBeforeLooting = false
+			wasMountedBeforeLooting = false
+		elseif wasMountedBeforeLooting and not IsMountedLoc() then
+			dmsg("wasMountedBeforeLooting")
+			isFinishing = false
+			wasMountedBeforeLooting = false
+			tapH()
+		elseif wasMovingBeforeLooting then
+			dmsg("wasMovingBeforeLooting")
+			isFinishing = false
+			wasMovingBeforeLooting = false
+			wasMountedBeforeLooting = false
+			tapT()
 		else
-			--if IsUnitInCombatLoc("player") then
-			--	dmsg("Finished and in combat."..CurFocus())
-			--	isFinishing = false
-			--	wasMovingBeforeLooting = false
-			--	wasMountedBeforeLooting = false
-			--elseif IsGameCameraUIModeActiveLoc() then
-			--	dmsg("Finished and in menu."..CurFocus())
-			--	isFinishing = false
-			--	wasMovingBeforeLooting = false
-			--	wasMountedBeforeLooting = false
-			--elseif IsApprovedInteractable() then
-			--	dmsg("Interact with next item:"..CurFocus())
-			--	isFinishing = false
-			--	tapE()
-			--elseif clientInteractingAction == "Fish" then
-			if clientInteractingAction == "Fish" then
-				--ptk.SetIndOnFor(ptk.VK_I, 20)
-				--zo_callLater(function() ptk.SetIndOnFor(ptk.VK_9, 20) end, 1000)
-				UseNextFish()
-			elseif wasMountedBeforeLooting and not IsMountedLoc() then
-				dmsg("wasMountedBeforeLooting")
-				isFinishing = false
-				wasMountedBeforeLooting = false
-				tapH()
-			elseif wasMovingBeforeLooting then
-				dmsg("wasMovingBeforeLooting")
-				isFinishing = false
-				wasMovingBeforeLooting = false
-				wasMountedBeforeLooting = false
-				tapT()
-			else
-				dmsg("NOT wasMountedBeforeLooting, NOT wasMovingBeforeLooting")
-				isFinishing = false
-				wasMovingBeforeLooting = false
-				wasMountedBeforeLooting = false
-				AHKVacuum.ClearInteraction()
-			end
-		end -- tmpbri
+			dmsg("NOT wasMountedBeforeLooting, NOT wasMovingBeforeLooting")
+			isFinishing = false
+			wasMovingBeforeLooting = false
+			wasMountedBeforeLooting = false
+			AHKVacuum.ClearInteraction()
+		end
 	end
 end
 
 function AHKVacuum.OnMountedStateChange(eventCode, mounted)
 	dmsg("OnMountedStateChange"
-		.." "..BoolDecode(isPressingKey, "PressingKey", "NotPressingKey")
+		--.." "..BoolDecode(isPressingKey, "PressingKey", "NotPressingKey")
+		.." ".."SinceKey:"..tostring(GetGameTimeMillisecondsLoc()-msLastPressE)
 		.."/"..BoolDecode(isInteracting, "Interacting", "NotInteracting")
 		.."/"..BoolDecode(isFinishing, "Finishing", "NotFinishing"))
-
-	if mounted and wasMovingBeforeLooting and not IsPlayerTryingToMoveLoc() then
-		--d("wasMovingBeforeLooting")
-		tapT()
-		zo_callLater(AHKVacuum.ClearInteraction, 50)
+	if mounted then
+		if mounted and wasMovingBeforeLooting and not IsPlayerTryingToMoveLoc() then
+			--d("wasMovingBeforeLooting")
+			tapT()
+			--zo_callLater(AHKVacuum.ClearInteraction, 50)
+		end
+		AHKVacuum.ClearInteraction()
+		wasMovingBeforeLooting = false
+		wasMountedBeforeLooting = false
 	end
 end
 
 function AHKVacuum.HookFish(eventCode, bagId, slotId, isNewItem, itemSoundCategory, inventoryUpdateReason, stackCountChange) -- EVENT_INVENTORY_SINGLE_SLOT_UPDATE (number eventCode, Bag bagId, number slotId, boolean isNewItem, ItemUISoundCategory itemSoundCategory, number inventoryUpdateReason, number stackCountChange)
-	--if (GetItemType(bagId,slotId) == ITEMTYPE_LURE and isNewItem == false and stackCountChange == -1 and itemSoundCategory == 39) then
+	--if (GetItemType(bagId,slotId) == ITEMTYPE_LURE and isNewItem == false and stackCountChange == -1 and itemSoundCategory == ITEM_SOUND_CATEGORY_LURE) then
 	local itemType = GetItemType(bagId,slotId)
-	if (itemType == ITEMTYPE_LURE and stackCountChange == -1) then
+	--if (itemType == ITEMTYPE_LURE and isNewItem == false and stackCountChange == -1 and itemSoundCategory == ITEM_SOUND_CATEGORY_LURE) then
+	if ((itemType == ITEMTYPE_LURE or itemSoundCategory == ITEM_SOUND_CATEGORY_LURE) and isNewItem == false and stackCountChange == -1) then
 		dmsg("Lure used, pressing E")
 		ptk.SetIndOnFor(ptk.VK_E, 20)
-	elseif (itemType == ITEMTYPE_FISH and stackCountChange == -1) then
+	elseif ((itemType == ITEMTYPE_FISH or itemSoundCategory == ITEM_SOUND_CATEGORY_FISH) and isNewItem == false and stackCountChange == -1) then
 		dmsg("Filleted fish. Using next")
+		LogValues("zo_callLater UseNextFish 1000")
 		zo_callLater(UseNextFish, 1000)
 	end
 end
@@ -384,15 +396,23 @@ function AHKVacuum:Initialize()
 		AHKVacuum.savedVars.interactEnded = {}
 	end
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_CLIENT_INTERACT_RESULT, function(_, result, interactTargetName)
-			if result == CLIENT_INTERACT_RESULT_SUCCESS then
+			local curTime = GetGameTimeMillisecondsLoc()
+			if curTime >= msLastPressE+2000 then
+				AHKVacuum.ClearInteraction()
+				wasMovingBeforeLooting = false
+				wasMountedBeforeLooting = false
+			end
+			--if result == CLIENT_INTERACT_RESULT_SUCCESS then
+			if result == CLIENT_INTERACT_RESULT_SUCCESS and not IsPlayerTryingToMoveLoc() and curTime < msLastPressE+2000 then
 				startedAction, startedInteractableName, startedInteractBlocked, startedIsOwned, startedAdditionalInfo, startedContextualInfo, startedContextualLink, startedIsCriminalInteract = curAction, curInteractableName, curInteractBlocked, curIsOwned, curAdditionalInfo, curContextualInfo, curContextualLink, curIsCriminalInteract
 --if curAction~=startedAction or curInteractableName~=startedInteractableName or curInteractBlocked~=startedInteractBlocked or curIsOwned~=startedIsOwned or curAdditionalInfo~=startedAdditionalInfo or curContextualInfo~=startedContextualInfo or curContextualLink~=startedContextualLink or curIsCriminalInteract~=startedIsCriminalInteract then 
 				isInteracting = true
+				msLastInteractionBegin = curTime
 				isFinishing = false
 
 				clientInteractingWith = interactTargetName
 				clientInteractingAction = curAction
-				clientInteractingTime = GetGameTimeMillisecondsLoc()
+				clientInteractingTime = curTime
 				AHKVacuum.savedVars.interactResultSuccess[clientInteractingWith] = clientInteractingTime
 				--AHKVacuum.OnBeginInteracting() -- if this doesn't work, put back StartInteraction
 				if curAction == "Fish" then
@@ -467,23 +487,27 @@ function AHKVacuum:ShopDirectionRightOn()  ptk.SetIndOn (ptk.VK_D) end
 function AHKVacuum:ShopDirectionRightOff() ptk.SetIndOff(ptk.VK_D) end
 function AHKVacuum:ShopDirectionLeftOn()   ptk.SetIndOn (ptk.VK_A) end
 function AHKVacuum:ShopDirectionLeftOff()  ptk.SetIndOff(ptk.VK_A) end
-function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) end
-function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) end
+--function AHKVacuum:ShopDirectionUpOn()     ptk.SetIndOn (ptk.VK_W) end
+--function AHKVacuum:ShopDirectionUpOff()    ptk.SetIndOff(ptk.VK_W) end
 --function AHKVacuum:ShopDirectionDownOn()   ptk.SetIndOn (ptk.VK_S) end
 --function AHKVacuum:ShopDirectionDownOff()  ptk.SetIndOff(ptk.VK_S) end
-function AHKVacuum:ShopDirectionDownOn()   end
-function AHKVacuum:ShopDirectionDownOff()  
+function AHKVacuum:ShopDirectionUpOn() end
+function AHKVacuum:ShopDirectionUpOff()  
 	d(""
 		.." "..BoolDecode(isPressingKey, "PressingKey", "NotPressingKey")
 		.."/"..BoolDecode(isInteracting, "Interacting", "NotInteracting")
 		.."/"..BoolDecode(isFinishing, "Finishing", "NotFinishing"))
-	UseNextFish()
-	d("Player:"..tostring(GetUnitName("player")))
+	d("clientInteractingWith:"..tostring(clientInteractingWith))
 	d("Player:"..tostring(GetUnitDisplayName("player")))
+	d("ITEM_SOUND_CATEGORY_LURE:"..tostring(ITEM_SOUND_CATEGORY_LURE)) -- 39
+	d("ITEM_SOUND_CATEGORY_FISH:"..tostring(ITEM_SOUND_CATEGORY_FISH)) -- 43
 	local StealthState ={[STEALTH_STATE_DETECTED]="STEALTH_STATE_DETECTED",[STEALTH_STATE_HIDDEN]="STEALTH_STATE_HIDDEN",[STEALTH_STATE_HIDDEN_ALMOST_DETECTED]="STEALTH_STATE_HIDDEN_ALMOST_DETECTED",[STEALTH_STATE_HIDING]="STEALTH_STATE_HIDING",[STEALTH_STATE_NONE]="STEALTH_STATE_NONE",[STEALTH_STATE_STEALTH]="STEALTH_STATE_STEALTH",[STEALTH_STATE_STEALTH_ALMOST_DETECTED]="STEALTH_STATE_STEALTH_ALMOST_DETECTED",}
 	d("StealthStateNum: "..tostring(GetUnitStealthState("player")))
 	d("StealthState: "..tostring(StealthState[GetUnitStealthState("player")]))
-
+end
+function AHKVacuum:ShopDirectionDownOn() end
+function AHKVacuum:ShopDirectionDownOff()  
+	UseNextFish()
 end
 
 
