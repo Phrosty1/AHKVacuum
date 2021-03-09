@@ -37,6 +37,8 @@ local IsMountedLoc = IsMounted -- Returns: boolean mounted
 local GetGameCameraInteractableActionInfoLoc = GetGameCameraInteractableActionInfo -- Returns: string:nilable action, string:nilable name, boolean interactBlocked, boolean isOwned, number additionalInfo, number:nilable contextualInfo, string:nilable contextualLink, boolean isCriminalInteract
 local IsInteractingLoc = IsInteracting -- Returns: boolean interacting
 local IsUnitInCombatLoc = IsUnitInCombat -- (string unitTag) Returns: boolean isInCombat
+local GetUnitStealthStateLoc = GetUnitStealthState -- * GetUnitStealthState(*string* _unitTag_) ** _Returns:_ *integer* _stealthState_
+local IsCrouchingLoc = function() return (GetUnitStealthStateLoc("player") ~= STEALTH_STATE_NONE) end
 local IsGameCameraUIModeActiveLoc = IsGameCameraUIModeActive -- ** _Returns:_ *bool* _active_
 -- Local variables
 local prvAction, prvInteractableName, prvInteractBlocked, prvIsOwned, prvAdditionalInfo, prvContextualInfo, prvContextualLink, prvIsCriminalInteract
@@ -60,6 +62,8 @@ local clientInteractingTime = 0
 local clientInteractingEndWith = nil -- EVENT_INTERACTION_ENDED
 local clientInteractingEndTime = 0
 
+local clientFinishingInteractionType = nil
+
 local ZO_FishingInteractionWith = nil -- ZO_Fishing:StartInteraction
 local ZO_FishingInteractionTime = 0
 local ZO_FishingInteractionEndWith = nil -- ZO_Fishing:StopInteraction
@@ -69,6 +73,7 @@ local ClientInteractResult = {[CLIENT_INTERACT_RESULT_ANTIQUITY_DIGGING_NO_INVEN
 local InteractionType = {[INTERACTION_ANTIQUITY_DIG_SPOT]="INTERACTION_ANTIQUITY_DIG_SPOT",[INTERACTION_ANTIQUITY_SCRYING]="INTERACTION_ANTIQUITY_SCRYING",[INTERACTION_ATTRIBUTE_RESPEC]="INTERACTION_ATTRIBUTE_RESPEC",[INTERACTION_AVA_HOOK_POINT]="INTERACTION_AVA_HOOK_POINT",[INTERACTION_BANK]="INTERACTION_BANK",[INTERACTION_BOOK]="INTERACTION_BOOK",[INTERACTION_BUY_BAG_SPACE]="INTERACTION_BUY_BAG_SPACE",[INTERACTION_CONVERSATION]="INTERACTION_CONVERSATION",[INTERACTION_CRAFT]="INTERACTION_CRAFT",[INTERACTION_DYE_STATION]="INTERACTION_DYE_STATION",[INTERACTION_FAST_TRAVEL]="INTERACTION_FAST_TRAVEL",[INTERACTION_FAST_TRAVEL_KEEP]="INTERACTION_FAST_TRAVEL_KEEP",[INTERACTION_FISH]="INTERACTION_FISH",[INTERACTION_FURNITURE]="INTERACTION_FURNITURE",[INTERACTION_GUILDBANK]="INTERACTION_GUILDBANK",[INTERACTION_GUILDKIOSK_BID]="INTERACTION_GUILDKIOSK_BID",[INTERACTION_GUILDKIOSK_PURCHASE]="INTERACTION_GUILDKIOSK_PURCHASE",[INTERACTION_HARVEST]="INTERACTION_HARVEST",[INTERACTION_HIDEYHOLE]="INTERACTION_HIDEYHOLE",[INTERACTION_KEEP_GUILD_CLAIM]="INTERACTION_KEEP_GUILD_CLAIM",[INTERACTION_KEEP_GUILD_RELEASE]="INTERACTION_KEEP_GUILD_RELEASE",[INTERACTION_KEEP_INSPECT]="INTERACTION_KEEP_INSPECT",[INTERACTION_KEEP_PIECE]="INTERACTION_KEEP_PIECE",[INTERACTION_LOCKPICK]="INTERACTION_LOCKPICK",[INTERACTION_LOOT]="INTERACTION_LOOT",[INTERACTION_MAIL]="INTERACTION_MAIL",[INTERACTION_NONE]="INTERACTION_NONE",[INTERACTION_PAY_BOUNTY]="INTERACTION_PAY_BOUNTY",[INTERACTION_PICKPOCKET]="INTERACTION_PICKPOCKET",[INTERACTION_QUEST]="INTERACTION_QUEST",[INTERACTION_RETRAIT]="INTERACTION_RETRAIT",[INTERACTION_SIEGE]="INTERACTION_SIEGE",[INTERACTION_SKILL_RESPEC]="INTERACTION_SKILL_RESPEC",[INTERACTION_STABLE]="INTERACTION_STABLE",[INTERACTION_STONE_MASON]="INTERACTION_STONE_MASON",[INTERACTION_STORE]="INTERACTION_STORE",[INTERACTION_TRADINGHOUSE]="INTERACTION_TRADINGHOUSE",[INTERACTION_TREASURE_MAP]="INTERACTION_TREASURE_MAP",[INTERACTION_VENDOR]="INTERACTION_VENDOR"}
 local InteractCancelContext = {[INTERACT_CANCEL_CONTEXT_COMBAT]="INTERACT_CANCEL_CONTEXT_COMBAT",[INTERACT_CANCEL_CONTEXT_DEFAULT]="INTERACT_CANCEL_CONTEXT_DEFAULT"}
 local InteractTargetType ={[INTERACT_TARGET_TYPE_AOE_LOOT]="INTERACT_TARGET_TYPE_AOE_LOOT",[INTERACT_TARGET_TYPE_CLIENT_CHARACTER]="INTERACT_TARGET_TYPE_CLIENT_CHARACTER",[INTERACT_TARGET_TYPE_COLLECTIBLE]="INTERACT_TARGET_TYPE_COLLECTIBLE",[INTERACT_TARGET_TYPE_FIXTURE]="INTERACT_TARGET_TYPE_FIXTURE",[INTERACT_TARGET_TYPE_ITEM]="INTERACT_TARGET_TYPE_ITEM",[INTERACT_TARGET_TYPE_NONE]="INTERACT_TARGET_TYPE_NONE",[INTERACT_TARGET_TYPE_OBJECT]="INTERACT_TARGET_TYPE_OBJECT",[INTERACT_TARGET_TYPE_QUEST_ITEM]="INTERACT_TARGET_TYPE_QUEST_ITEM",}
+local StealthState ={[STEALTH_STATE_DETECTED]="STEALTH_STATE_DETECTED",[STEALTH_STATE_HIDDEN]="STEALTH_STATE_HIDDEN",[STEALTH_STATE_HIDDEN_ALMOST_DETECTED]="STEALTH_STATE_HIDDEN_ALMOST_DETECTED",[STEALTH_STATE_HIDING]="STEALTH_STATE_HIDING",[STEALTH_STATE_NONE]="STEALTH_STATE_NONE",[STEALTH_STATE_STEALTH]="STEALTH_STATE_STEALTH",[STEALTH_STATE_STEALTH_ALMOST_DETECTED]="STEALTH_STATE_STEALTH_ALMOST_DETECTED",}
 
 local function dump(o)
 	if type(o) == 'table' then
@@ -182,12 +187,14 @@ local function IsApprovedInteractable()
 		and (curAdditionalInfo == ADDITIONAL_INTERACT_INFO_NONE
 			or curAdditionalInfo == ADDITIONAL_INTERACT_INFO_LOCKED
 			or curAdditionalInfo == ADDITIONAL_INTERACT_INFO_FISHING_NODE)
+		and (actionsToTakeByDefault[curAction] ~= nil or mountedWhitelist[curInteractableName] ~= nil)
 		and blacklist[curInteractableName] == nil
 		and (doRidePickupAll or mountedWhitelist[curInteractableName] ~= nil or not IsMountedLoc())
-		and (actionsToTakeByDefault[curAction] ~= nil or mountedWhitelist[curInteractableName] ~= nil)
-		and (doAutoStartFishing or curAdditionalInfo ~= ADDITIONAL_INTERACT_INFO_FISHING_NODE)
-		and not IsUnitInCombatLoc("player") -- not in combat
+		and (insectsToTake[curInteractableName] == nil or not IsMountedLoc())
+		and (doAutoStartFishing or curAdditionalInfo ~= ADDITIONAL_INTERACT_INFO_FISHING_NODE or clientFinishingInteractionType == INTERACTION_LOOT)
 		and not IsGameCameraUIModeActiveLoc() -- not in menu
+		and not IsUnitInCombatLoc("player") -- not in combat
+		and GetUnitStealthStateLoc("player") == STEALTH_STATE_NONE -- not crouched
 	then return true else return false end
 end
 function AHKVacuum.OnReticleSet()
@@ -244,6 +251,7 @@ function AHKVacuum.OnFinishInteracting()
 	end
 	clientInteractingWith = nil
 	msLastInteractionEnd = GetGameTimeMillisecondsLoc()
+	dmsg("OnFinishInteracting."..CurFocus())
 	if isInteracting then
 		isInteracting = false
 		isFinishing = true
@@ -367,6 +375,8 @@ local function InitLogs()
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_INTERACTION_ENDED, function(...) LogValues("EVENT_INTERACTION_ENDED", {...}) end)
 
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_INVENTORY_SINGLE_SLOT_UPDATE, function(...) LogValues("EVENT_INVENTORY_SINGLE_SLOT_UPDATE", {...}) end)
+	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name.."LOG", EVENT_ACTION_UPDATE_COOLDOWNS, function(...) LogValues("EVENT_ACTION_UPDATE_COOLDOWNS", {...}) end)
+
 
 end
 
@@ -414,8 +424,8 @@ function AHKVacuum:Initialize()
 				clientInteractingAction = curAction
 				clientInteractingTime = curTime
 				AHKVacuum.savedVars.interactResultSuccess[clientInteractingWith] = clientInteractingTime
-				--AHKVacuum.OnBeginInteracting() -- if this doesn't work, put back StartInteraction
 				if curAction == "Fish" then
+					AHKVacuum.OnBeginInteracting()
 					wasMovingBeforeLooting = false
 					wasMountedBeforeLooting = true
 				end
@@ -424,7 +434,12 @@ function AHKVacuum:Initialize()
 		end)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_INTERACTION_ENDED, function(_, interactType, cancelContext)
 			dmsg("EVENT_INTERACTION_ENDED: "..tostring(InteractionType[interactType]).." "..tostring(InteractCancelContext[cancelContext]))
+			if curAction == "Fish" then
+				isInteracting = true
+				clientFinishingInteractionType = interactType
+			end
 			AHKVacuum.OnFinishInteracting()
+			clientFinishingInteractionType = nil
 		end)
 	EVENT_MANAGER:RegisterForEvent(AHKVacuum.name, EVENT_COMBAT_EVENT, AHKVacuum.OnFinishInteracting)
 	EVENT_MANAGER:AddFilterForEvent(AHKVacuum.name, EVENT_COMBAT_EVENT, REGISTER_FILTER_COMBAT_RESULT, ACTION_RESULT_TARGET_OUT_OF_RANGE)
